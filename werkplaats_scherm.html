@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werkplaats Scherm</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg:     #0f0f0f;
+    --bg2:    #1a1a1a;
+    --bg3:    #222;
+    --border: #2e2e2e;
+    --text:   #e8e8e8;
+    --muted:  #666;
+    --accent: #4da6ff;
+    --ok:     #39c96e;
+    --danger: #e85d3a;
+    --hoog:   #f0b429;
+    --spoed:  #e85d3a;
+    --font:   'Inter', system-ui, sans-serif;
+    --mono:   'JetBrains Mono', 'Fira Mono', monospace;
+    --r:      8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font); font-size: 15px;
+    min-height: 100vh;
+  }
+
+  /* ── LOGIN ── */
+  #login {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh; gap: 12px;
+    padding: 24px;
+  }
+  #login h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  #login input {
+    width: 320px; max-width: 100%;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 15px;
+    padding: 12px 14px;
+  }
+  #login input:focus { outline: none; border-color: var(--accent); }
+  #login button {
+    width: 320px; max-width: 100%;
+    padding: 13px; background: #184381; color: #fff;
+    border: none; border-radius: var(--r);
+    font-family: var(--font); font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  #login-fout { font-size: 13px; color: var(--danger); min-height: 18px; }
+
+  /* ── APP ── */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+  #app.zichtbaar { display: flex; }
+
+  /* ── HEADER ── */
+  .scherm-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .scherm-header-links { display: flex; align-items: center; gap: 16px; }
+  .scherm-titel { font-size: 17px; font-weight: 700; }
+  .scherm-monteur {
+    font-size: 13px; color: var(--muted); font-family: var(--mono);
+  }
+  .scherm-live {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--ok); font-family: var(--mono);
+  }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .3; }
+  }
+  .scherm-header button {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--muted);
+    font-family: var(--font); font-size: 13px;
+    padding: 7px 14px; cursor: pointer;
+  }
+
+  /* ── BODY LAYOUT ── */
+  .scherm-body {
+    flex: 1; display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0; overflow: hidden;
+  }
+
+  /* ── LINKER PANEEL: opdrachten ── */
+  .paneel-links {
+    padding: 20px; overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  .paneel-titel {
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-bottom: 16px;
+  }
+
+  /* ── OPDRACHT KAART ── */
+  .opdracht-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 14px;
+  }
+  .opdracht-kaart.prio-spoed  { border-left: 3px solid var(--spoed); }
+  .opdracht-kaart.prio-hoog   { border-left: 3px solid var(--hoog); }
+  .opdracht-kaart.prio-normaal{ border-left: 3px solid #3a3a3a; }
+
+  .ok-top {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; margin-bottom: 12px; gap: 12px;
+  }
+  .ok-nr { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .ok-prio {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px; letter-spacing: .05em;
+    flex-shrink: 0;
+  }
+  .prio-spoed-badge  { background: rgba(232,93,58,.15); color: var(--spoed); border: 1px solid rgba(232,93,58,.3); }
+  .prio-hoog-badge   { background: rgba(240,180,41,.12); color: var(--hoog);  border: 1px solid rgba(240,180,41,.3); }
+  .prio-normaal-badge{ background: rgba(77,166,255,.1);  color: var(--accent);border: 1px solid rgba(77,166,255,.25);}
+
+  .ok-apparaat { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .ok-merk     { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+  .ok-sectie-label {
+    font-size: 10px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .ok-klacht {
+    font-size: 14px; line-height: 1.5; color: #ccc;
+    background: var(--bg3); border-radius: var(--r);
+    padding: 10px 12px; margin-bottom: 12px;
+  }
+  .ok-meta {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    padding-top: 12px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); font-family: var(--mono);
+  }
+  .ok-meta span { display: flex; flex-direction: column; gap: 2px; }
+  .ok-meta strong { color: var(--text); font-size: 13px; }
+
+  /* Logs binnen kaart */
+  .ok-logs { margin-top: 14px; }
+  .ok-log-item {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 12px; margin-bottom: 8px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .ok-log-actie {
+    font-size: 10px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .ok-onderdelen {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;
+  }
+  .ok-onderdeel-tag {
+    font-size: 11px; font-family: var(--mono);
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px;
+  }
+
+  /* Leeg staat */
+  .scherm-leeg {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 300px;
+    color: var(--muted); gap: 10px;
+  }
+  .scherm-leeg-icon { font-size: 40px; opacity: .3; }
+
+  /* ── RECHTER PANEEL: Rens chat ── */
+  .paneel-rechts {
+    display: flex; flex-direction: column;
+    background: var(--bg2);
+  }
+  .chat-kop {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    font-size: 14px; font-weight: 600; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .chat-kop-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); font-weight: 400; }
+  .chat-berichten {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chat-msg {
+    padding: 10px 13px; border-radius: 10px;
+    font-size: 13px; line-height: 1.5; max-width: 95%;
+  }
+  .chat-msg-user {
+    background: #184381; color: #fff;
+    align-self: flex-end; border-radius: 10px 10px 2px 10px;
+  }
+  .chat-msg-ai {
+    background: var(--bg3); border: 1px solid var(--border);
+    align-self: flex-start; border-radius: 10px 10px 10px 2px;
+  }
+  .chat-label-ai {
+    font-size: 10px; font-family: var(--mono); color: var(--muted);
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: .06em;
+  }
+  .chat-welkom {
+    color: var(--muted); font-size: 13px; text-align: center;
+    padding: 20px 0;
+  }
+  .chat-typing {
+    display: none; gap: 4px; padding: 4px 0;
+  }
+  .chat-typing span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+    animation: blink 1.2s infinite;
+  }
+  .chat-typing span:nth-child(2) { animation-delay: .2s; }
+  .chat-typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+
+  .chat-invoer {
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; flex-shrink: 0; flex-direction: column;
+  }
+  .chat-invoer-rij { display: flex; gap: 8px; }
+  .chat-invoer textarea {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 14px;
+    padding: 10px 12px; resize: none; min-height: 44px; max-height: 120px;
+    line-height: 1.4;
+  }
+  .chat-invoer textarea:focus { outline: none; border-color: var(--accent); }
+  .chat-invoer-knop {
+    width: 44px; height: 44px; background: #184381; color: #fff;
+    border: none; border-radius: var(--r);
+    font-size: 18px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .chat-invoer-knop.mic {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--muted);
+    font-size: 20px; transition: background .15s, border-color .15s, color .15s;
+  }
+  .chat-invoer-knop.mic.luistert {
+    background: rgba(232,93,58,.15); border-color: var(--danger); color: var(--danger);
+    animation: pulse-mic 1s ease-in-out infinite;
+  }
+  .chat-invoer-knop.mic.spreekt {
+    background: rgba(57,201,110,.1); border-color: var(--ok); color: var(--ok);
+  }
+  @keyframes pulse-mic {
+    0%,100% { box-shadow: 0 0 0 0 rgba(232,93,58,.4); }
+    50%      { box-shadow: 0 0 0 7px rgba(232,93,58,0); }
+  }
+  .spraak-status-balk {
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    text-align: center; min-height: 16px;
+  }
+
+  /* ── EXPLODED VIEW KNOP ── */
+  .ok-acties {
+    display: flex; gap: 8px; margin-top: 14px;
+    padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  .ok-actie-knop {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--muted);
+    font-family: var(--font); font-size: 12px;
+    padding: 7px 12px; cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .ok-actie-knop:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── EXPLODED VIEW MODAL ── */
+  #exploded-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.75); z-index: 200;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #exploded-overlay.open { display: flex; }
+  #exploded-modal {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 14px; width: 100%; max-width: 860px;
+    max-height: 90vh; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .ev-kop {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 16px;
+    padding: 18px 20px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ev-titel { font-size: 17px; font-weight: 700; }
+  .ev-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+  .ev-sluit {
+    background: none; border: none; color: var(--muted);
+    font-size: 22px; cursor: pointer; padding: 0; line-height: 1;
+    flex-shrink: 0;
+  }
+  .ev-sluit:hover { color: var(--text); }
+  .ev-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+  #ev-inhoud img { display: block; margin: 0 auto; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 18px;
+    font-size: 13px; z-index: 999;
+    transition: transform .25s, opacity .25s;
+    opacity: 0; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login">
+  <h1>Werkplaats Scherm</h1>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Log in om je actieve opdrachten te zien</p>
+  <input type="email"    id="s-email" placeholder="E-mailadres" autocomplete="email">
+  <input type="password" id="s-ww"    placeholder="Wachtwoord"  autocomplete="current-password"
+    onkeydown="if(event.key==='Enter') signIn()">
+  <div id="login-fout"></div>
+  <button onclick="signIn()">Inloggen</button>
+</div>
+
+<!-- ── APP ── -->
+<div id="app">
+  <div class="scherm-header">
+    <div class="scherm-header-links">
+      <div class="scherm-titel">Werkplaats Scherm</div>
+      <div class="scherm-monteur" id="s-monteur-naam">—</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="scherm-live">
+        <div class="live-dot"></div>
+        Live
+      </div>
+      <button onclick="uitloggen()">Afmelden</button>
+    </div>
+  </div>
+
+  <div class="scherm-body">
+    <!-- Links: opdrachten -->
+    <div class="paneel-links">
+      <div class="paneel-titel" id="s-paneel-titel">Mijn actieve opdrachten</div>
+      <div id="s-opdrachten-lijst"></div>
+    </div>
+
+    <!-- Rechts: Rens -->
+    <div class="paneel-rechts">
+      <div class="chat-kop">
+        ✦ Rens
+        <span class="chat-kop-sub">AI Werkplaatsassistent</span>
+      </div>
+      <div class="chat-berichten" id="s-chat-berichten">
+        <div class="chat-welkom">
+          Stel een vraag over een reparatie of apparaat.<br>
+          <span style="font-size:11px;font-family:var(--mono)">Bijv: "Hoe vervang ik een pomp bij een SB4537?"</span>
+        </div>
+        <div class="chat-typing" id="s-chat-typing">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="chat-invoer">
+        <div class="chat-invoer-rij">
+          <textarea id="s-chat-input" placeholder="Stel een vraag aan Rens..." rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();stuurBericht()}"
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+          <button class="chat-invoer-knop mic" id="mic-knop" onclick="toggleMic()" title="Inspreken">🎙</button>
+          <button class="chat-invoer-knop" onclick="stuurBericht()" title="Versturen">↑</button>
+        </div>
+        <div class="spraak-status-balk" id="spraak-status-balk"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── EXPLODED VIEW MODAL ── -->
+<div id="exploded-overlay" onclick="if(event.target===this)sluitExplodedView()">
+  <div id="exploded-modal">
+    <div class="ev-kop">
+      <div>
+        <div class="ev-titel" id="ev-titel">Exploded view</div>
+        <div class="ev-sub" id="ev-sub"></div>
+      </div>
+      <button class="ev-sluit" onclick="sluitExplodedView()">×</button>
+    </div>
+    <div class="ev-body">
+      <div id="ev-inhoud"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// SUPABASE_URL en SUPABASE_KEY worden ingeladen vanuit config.js
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// GEMINI_KEY wordt ingeladen vanuit config.js (leeg = chat uitgeschakeld)
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_KEY}`;
+
+let monteur       = null;
+let chatGeschied  = [];
+let realtimeKanaal = null;
+
+// ── AUTH ──────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await verwerkSessie(session.user);
+});
+
+async function signIn() {
+  const email = document.getElementById('s-email').value.trim();
+  const ww    = document.getElementById('s-ww').value;
+  const fout  = document.getElementById('login-fout');
+  fout.textContent = '';
+  if (!email || !ww) { fout.textContent = 'Vul e-mail en wachtwoord in'; return; }
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: ww });
+  if (error) { fout.textContent = error.message; return; }
+  await verwerkSessie(data.user);
+}
+
+async function verwerkSessie(user) {
+  const { data: m } = await sb.from('monteurs')
+    .select('*').eq('auth_user_id', user.id).single();
+  if (!m) { document.getElementById('login-fout').textContent = 'Geen monteurprofiel gevonden'; return; }
+
+  monteur = m;
+  document.getElementById('login').style.display      = 'none';
+  document.getElementById('app').classList.add('zichtbaar');
+  document.getElementById('s-monteur-naam').textContent = m.naam;
+
+  await laadOpdrachten();
+  startRealtime();
+}
+
+async function uitloggen() {
+  await sb.auth.signOut();
+  if (realtimeKanaal) sb.removeChannel(realtimeKanaal);
+  monteur = null;
+  document.getElementById('app').classList.remove('zichtbaar');
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('s-email').value = '';
+  document.getElementById('s-ww').value   = '';
+}
+
+// ── OPDRACHTEN LADEN ─────────────────────────────────────────
+async function laadOpdrachten() {
+  if (!monteur) return;
+  try {
+    const { data, error } = await sb.from('reparaties')
+      .select(`
+        id, opdrachtnr, klant_naam, klant_nummer, artikelcode,
+        apparaat_type, merk, model, serienummer, klacht,
+        prioriteit, status, toegewezen_door, uiterste_datum_afdeling,
+        aangemaakt_op, in_behandeling_op,
+        reparatie_logs(actie, notitie, gebruikte_onderdelen, bestede_tijd_minuten, aangemaakt_op)
+      `)
+      .eq('monteur_id', monteur.id)
+      .in('status', ['445', '450', '465'])
+      .order('in_behandeling_op', { ascending: false });
+
+    if (error) throw error;
+    renderOpdrachten(data || []);
+  } catch(e) {
+    toast('Fout: ' + e.message);
+  }
+}
+
+function renderOpdrachten(lijst) {
+  const el = document.getElementById('s-opdrachten-lijst');
+
+  if (!lijst.length) {
+    el.innerHTML = `
+      <div class="scherm-leeg">
+        <div class="scherm-leeg-icon">🔧</div>
+        <div>Geen actieve opdrachten</div>
+        <div style="font-size:12px;font-family:var(--mono);color:var(--muted)">
+          Pak een opdracht op via de mobiele app
+        </div>
+      </div>`;
+    return;
+  }
+
+  const prioLabel = { spoed: 'SPOED', hoog: 'HOOG', normaal: 'NORMAAL', laag: 'LAAG' };
+  const prioBadge = { spoed: 'prio-spoed-badge', hoog: 'prio-hoog-badge', normaal: 'prio-normaal-badge', laag: 'prio-normaal-badge' };
+
+  el.innerHTML = lijst.map(r => {
+    const logs = (r.reparatie_logs || [])
+      .filter(l => l.notitie || l.gebruikte_onderdelen)
+      .sort((a, b) => new Date(a.aangemaakt_op) - new Date(b.aangemaakt_op));
+
+    const logsHTML = logs.length ? `
+      <div class="ok-logs">
+        <div class="ok-sectie-label">Werkzaamheden</div>
+        ${logs.map(l => `
+          <div class="ok-log-item">
+            <div class="ok-log-actie">${l.actie}</div>
+            ${l.notitie ? `<div>${l.notitie}</div>` : ''}
+            ${l.gebruikte_onderdelen ? `
+              <div class="ok-onderdelen">
+                ${l.gebruikte_onderdelen.split(',').map(o =>
+                  `<span class="ok-onderdeel-tag">${o.trim()}</span>`
+                ).join('')}
+              </div>` : ''}
+            ${l.bestede_tijd_minuten ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;font-family:var(--mono)">${l.bestede_tijd_minuten} min</div>` : ''}
+          </div>`).join('')}
+      </div>` : '';
+
+    const opgepaktop = r.in_behandeling_op
+      ? new Date(r.in_behandeling_op).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+      : '—';
+
+    // Deadline badge
+    let deadlineHTML = '';
+    if (r.uiterste_datum_afdeling) {
+      const nu    = new Date();
+      const dl    = new Date(r.uiterste_datum_afdeling);
+      const dagen = Math.ceil((dl - nu) / 86400000);
+      const kleur = dagen <= 0 ? '#e84c3a' : dagen <= 2 ? '#e66519' : '#4da6ff';
+      const label = dagen <= 0 ? 'Verlopen' : dagen === 1 ? 'Morgen' : `${dagen} dagen`;
+      if (dagen <= 7) {
+        deadlineHTML = `<div style="font-size:11px;font-family:var(--mono);font-weight:600;
+          color:${kleur};border:1px solid ${kleur};border-radius:3px;
+          padding:2px 7px;display:inline-block;margin-bottom:6px">
+          Deadline: ${label} · ${dl.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}
+        </div>`;
+      }
+    }
+
+    // Toewijzingsbadge
+    const toewijzingHTML = r.toegewezen_door === 'manager'
+      ? `<div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-bottom:6px">Toegewezen door manager</div>`
+      : r.toegewezen_door === 'monteur'
+      ? `<div style="font-size:11px;color:var(--danger);font-family:var(--mono);margin-bottom:6px">Zelf opgepakt</div>`
+      : '';
+
+    // Linkerbalk kleur
+    const borderKleur = r.toegewezen_door === 'manager' ? 'var(--accent)'
+      : r.toegewezen_door === 'monteur' ? 'var(--danger)' : 'transparent';
+
+    return `
+      <div class="opdracht-kaart prio-${r.prioriteit}" style="border-left:3px solid ${borderKleur}">
+        <div class="ok-top">
+          <div class="ok-nr">${r.opdrachtnr}</div>
+          <div class="ok-prio ${prioBadge[r.prioriteit]}">${prioLabel[r.prioriteit]}</div>
+        </div>
+        <div class="ok-apparaat">${r.apparaat_type}</div>
+        <div class="ok-merk">${r.merk}${r.model ? ' · ' + r.model : ''}${r.artikelcode ? ' · <span style="font-family:var(--mono)">' + r.artikelcode + '</span>' : ''}</div>
+        ${deadlineHTML}${toewijzingHTML}
+        <div class="ok-sectie-label">Klacht</div>
+        <div class="ok-klacht">${r.klacht}</div>
+        <div class="ok-meta">
+          <span><div>Klant</div><strong>${r.klant_naam}</strong></span>
+          ${r.serienummer ? `<span><div>Serienr.</div><strong style="font-family:var(--mono)">${r.serienummer}</strong></span>` : ''}
+          <span><div>Opgepakt</div><strong>${opgepaktop}</strong></span>
+        </div>
+        ${logsHTML}
+        <div class="ok-acties"
+          data-artikelcode="${escHtml(r.artikelcode || '')}"
+          data-apparaat="${escHtml(r.apparaat_type)}"
+          data-merk="${escHtml(r.merk || '')}"
+          data-model="${escHtml(r.model || '')}">
+          <button class="ok-actie-knop"
+            onclick="openExplodedView(this.closest('[data-artikelcode]'))"
+            data-apparaat="${escHtml(r.apparaat_type)}"
+            data-merk="${escHtml(r.merk || '')}"
+            data-model="${escHtml(r.model || '')}"
+            data-artikelcode="${escHtml(r.artikelcode || '')}">
+            📐 Exploded view
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── REALTIME SYNC (opdrachten + Rens berichten) ───────────────
+let rensIgnoreIds = new Set();
+
+function startRealtime() {
+  if (realtimeKanaal) sb.removeChannel(realtimeKanaal);
+
+  // Unieke kanaalnaam per monteur zodat meerdere schermen naast
+  // elkaar kunnen draaien zonder elkaars events te stelen
+  realtimeKanaal = sb.channel(`scherm-${monteur.id}`)
+    // Opdracht opgepakt, afgerond, status gewijzigd
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'reparaties',
+      filter: `monteur_id=eq.${monteur.id}`,
+    }, () => laadOpdrachten())
+    // Manager wijst opdracht toe — monteur_id wordt dan net ingesteld
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'reparaties',
+    }, (payload) => {
+      if (payload.new?.monteur_id === monteur.id) laadOpdrachten();
+    })
+    // Werkzaamheden gelogd (onderdelen, notities)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'reparatie_logs',
+      filter: `monteur_id=eq.${monteur.id}`,
+    }, () => laadOpdrachten())
+    // Commando's vanuit de mobiele app (bijv. exploded view openen)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'scherm_commando',
+      filter: `monteur_id=eq.${monteur.id}`,
+    }, (payload) => {
+      const cmd = payload.new;
+      if (cmd.type === 'exploded_view' && cmd.payload?.artikelcode) {
+        // Zoek de bijbehorende reparatie voor context
+        const opdrachten = document.querySelectorAll('[data-artikelcode]');
+        let apparaat = '', merk = '', model = '';
+        opdrachten.forEach(el => {
+          if (el.dataset.artikelcode === cmd.payload.artikelcode) {
+            apparaat = el.dataset.apparaat || '';
+            merk     = el.dataset.merk     || '';
+            model    = el.dataset.model    || '';
+          }
+        });
+        laadEnToonExplodedView(cmd.payload.artikelcode, apparaat, merk, model);
+        toast('📐 Exploded view geopend vanuit app');
+      }
+    })
+    // Rens-berichten vanuit de mobiele app
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'rens_berichten',
+      filter: `monteur_id=eq.${monteur.id}`,
+    }, (payload) => {
+      const b = payload.new;
+      if (rensIgnoreIds.has(b.id)) { rensIgnoreIds.delete(b.id); return; }
+      voegChatToe(b.rol === 'user' ? 'user' : 'ai', b.inhoud);
+    })
+    .subscribe((status) => {
+      const dot = document.querySelector('.live-dot');
+      const lbl = document.querySelector('.scherm-live');
+      if (status === 'SUBSCRIBED') {
+        dot.style.background = 'var(--ok)';
+        lbl.style.color = 'var(--ok)';
+      } else {
+        dot.style.background = 'var(--danger)';
+        lbl.style.color = 'var(--danger)';
+      }
+    });
+
+  laadRensBerichten();
+}
+
+async function laadRensBerichten() {
+  try {
+    const vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    const { data } = await sb.from('rens_berichten')
+      .select('id, rol, inhoud')
+      .eq('monteur_id', monteur.id)
+      .gte('aangemaakt_op', vandaag.toISOString())
+      .order('aangemaakt_op', { ascending: true })
+      .limit(20);
+    if (!data?.length) return;
+    data.forEach(b => {
+      rensIgnoreIds.add(b.id);
+      voegChatToe(b.rol === 'user' ? 'user' : 'ai', b.inhoud);
+    });
+  } catch { /* stil falen */ }
+}
+
+async function slaRensBericht(rol, inhoud) {
+  try {
+    const { data } = await sb.from('rens_berichten').insert({
+      monteur_id: monteur.id,
+      rol,
+      inhoud,
+    }).select('id').single();
+    if (data?.id) rensIgnoreIds.add(data.id);
+  } catch { /* stil falen */ }
+}
+
+// ── RENS CHAT ─────────────────────────────────────────────────
+async function stuurBericht() {
+  const input = document.getElementById('s-chat-input');
+  const vraag = input.value.trim();
+  if (!vraag) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  voegChatToe('user', vraag);
+  slaRensBericht('user', vraag);
+
+  const typing = document.getElementById('s-chat-typing');
+  typing.style.display = 'flex';
+  scrollChat();
+
+  try {
+    const antwoord = await vraagRens(vraag);
+    typing.style.display = 'none';
+    voegChatToe('ai', antwoord);
+    slaRensBericht('ai', antwoord);
+  } catch(e) {
+    typing.style.display = 'none';
+    voegChatToe('ai', 'Fout: ' + e.message);
+  }
+}
+
+async function vraagRens(vraag) {
+  if (!GEMINI_KEY) return 'Rens is momenteel niet beschikbaar.';
+  const actief = document.getElementById('s-opdrachten-lijst')
+    .querySelector('.ok-klacht');
+  const context = actief
+    ? `\nActieve opdracht: ${actief.textContent}`
+    : '';
+
+  const sys = `Je bent Rens, de AI werkplaatsassistent van Strijbosch.
+Antwoord altijd in het Nederlands. Beknopt en praktisch.
+Monteur: ${monteur?.naam || '—'}${context}`;
+
+  const inhoud = chatGeschied.length === 0
+    ? [{ role: 'user', parts: [{ text: sys + '\n\n' + vraag }] }]
+    : [...chatGeschied, { role: 'user', parts: [{ text: vraag }] }];
+
+  chatGeschied.push({ role: 'user', parts: [{ text: vraag }] });
+
+  const resp = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: inhoud }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error?.message || resp.status);
+  const tekst = data.candidates[0].content.parts[0].text;
+  chatGeschied.push({ role: 'model', parts: [{ text: tekst }] });
+  return tekst;
+}
+
+function voegChatToe(type, tekst) {
+  const container = document.getElementById('s-chat-berichten');
+  const welkom = container.querySelector('.chat-welkom');
+  if (welkom) welkom.remove();
+
+  const div = document.createElement('div');
+  if (type === 'user') {
+    div.className   = 'chat-msg chat-msg-user';
+    div.textContent = tekst;
+  } else {
+    div.className = 'chat-msg chat-msg-ai';
+    const html = tekst
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '• $1')
+      .replace(/\n/g, '<br>');
+    div.innerHTML = `<div class="chat-label-ai">Rens</div>${html}`;
+  }
+
+  const typing = document.getElementById('s-chat-typing');
+  container.insertBefore(div, typing);
+  scrollChat();
+}
+
+function scrollChat() {
+  const c = document.getElementById('s-chat-berichten');
+  setTimeout(() => c.scrollTop = c.scrollHeight, 50);
+}
+
+// ── SPRAAK IN (SpeechRecognition) ────────────────────────────
+let micActief      = false;
+let micRec         = null;
+
+function toggleMic() {
+  if (micActief) stopMic();
+  else startMic();
+}
+
+function startMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Spraakherkenning niet beschikbaar in deze browser'); return; }
+
+  micActief = true;
+  zetMicStatus('luistert', '● Luistert...');
+
+  function maakSessie() {
+    if (!micActief) return;
+    const rec = new SR();
+    micRec = rec;
+    rec.lang = 'nl-NL';
+    rec.continuous = false;
+    rec.interimResults = true;
+
+    const input = document.getElementById('s-chat-input');
+    let basis = input.value.trimEnd();
+
+    rec.onresult = (e) => {
+      let interim = '', definitief = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) definitief += t;
+        else interim += t;
+      }
+      if (definitief) {
+        const sp = basis.length > 0 ? ' ' : '';
+        basis = basis + sp + definitief.trim();
+        input.value = basis;
+        // Stuur automatisch als volledige zin (eindigt op punt/vraagteken)
+        if (/[.?!]$/.test(definitief.trim())) {
+          stopMic();
+          stuurBericht();
+          return;
+        }
+      } else {
+        input.placeholder = interim || 'Stel een vraag aan Rens...';
+      }
+      input.scrollTop = input.scrollHeight;
+    };
+
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      toast('Spraakfout: ' + e.error);
+      stopMic();
+    };
+
+    rec.onend = () => {
+      if (micActief) setTimeout(maakSessie, 80);
+    };
+
+    try { rec.start(); } catch(e) {}
+  }
+
+  maakSessie();
+}
+
+function stopMic() {
+  micActief = false;
+  if (micRec) {
+    micRec.onend = null;
+    try { micRec.stop(); } catch(e) {}
+    micRec = null;
+  }
+  zetMicStatus('', '');
+  document.getElementById('s-chat-input').placeholder = 'Stel een vraag aan Rens...';
+}
+
+function zetMicStatus(cls, tekst) {
+  const knop   = document.getElementById('mic-knop');
+  const status = document.getElementById('spraak-status-balk');
+  knop.className = 'chat-invoer-knop mic' + (cls ? ' ' + cls : '');
+  status.textContent = tekst;
+}
+
+// ── SPRAAK UIT (SpeechSynthesis) ──────────────────────────────
+let spraakStem = null;
+
+function laadStem() {
+  // Wacht tot stemmen beschikbaar zijn
+  const stemmen = speechSynthesis.getVoices();
+  spraakStem = stemmen.find(s => s.lang.startsWith('nl')) || stemmen[0] || null;
+}
+
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.onvoiceschanged = laadStem;
+  laadStem();
+}
+
+function spreekUit(tekst) {
+  // Spraakuitvoer uitgeschakeld: we tonen alleen tekst in de chat.
+  return;
+}
+
+// ── EXPLODED VIEW ────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function openExplodedView(knop) {
+  const artikelcode = knop.dataset.artikelcode;
+  const apparaat    = knop.dataset.apparaat;
+  const merk        = knop.dataset.merk;
+  const model       = knop.dataset.model;
+  await laadEnToonExplodedView(artikelcode, apparaat, merk, model);
+}
+
+async function laadEnToonExplodedView(artikelcode, apparaat, merk, model) {
+  document.getElementById('ev-titel').textContent = apparaat || 'Exploded view';
+  document.getElementById('ev-sub').textContent   =
+    [artikelcode, merk, model].filter(Boolean).join(' · ');
+
+  const inhoud = document.getElementById('ev-inhoud');
+  inhoud.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">Laden...</div>';
+  document.getElementById('exploded-overlay').classList.add('open');
+
+  if (!artikelcode) {
+    inhoud.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">Geen artikelcode bekend</div>';
+    return;
+  }
+
+  try {
+    // Zoek de exploded view in de database
+    const { data, error } = await sb.from('exploded_views')
+      .select('bestandspad, bestandsnaam, mime_type')
+      .eq('artikelcode', artikelcode)
+      .single();
+
+    if (error || !data) {
+      inhoud.innerHTML = `
+        <div style="text-align:center;padding:60px;color:var(--muted)">
+          <div style="font-size:36px;opacity:.3;margin-bottom:12px">📐</div>
+          <div>Geen exploded view beschikbaar voor <strong style="color:var(--text);font-family:var(--mono)">${artikelcode}</strong></div>
+          <div style="font-size:12px;margin-top:8px">Upload een diagram via de admin-pagina</div>
+        </div>`;
+      return;
+    }
+
+    // Haal signed URL op (5 minuten geldig)
+    const { data: signed, error: signErr } = await sb.storage
+      .from('exploded-views')
+      .createSignedUrl(data.bestandspad, 300);
+
+    if (signErr) throw signErr;
+
+    const url      = signed.signedUrl;
+    const isPDF    = data.mime_type === 'application/pdf' || data.bestandspad.endsWith('.pdf');
+    const isImage  = !isPDF;
+
+    if (isImage) {
+      inhoud.innerHTML = `
+        <div style="text-align:center">
+          <img src="${url}" alt="Exploded view ${artikelcode}"
+            style="max-width:100%;max-height:600px;border-radius:var(--r);
+                   border:1px solid var(--border);background:var(--bg3)">
+        </div>`;
+    } else {
+      // PDF in iframe
+      inhoud.innerHTML = `
+        <iframe src="${url}" style="width:100%;height:600px;border:none;
+          border-radius:var(--r);background:var(--bg3)"></iframe>`;
+    }
+  } catch (e) {
+    inhoud.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">Fout: ${e.message}</div>`;
+  }
+}
+
+function sluitExplodedView() {
+  document.getElementById('exploded-overlay').classList.remove('open');
+  document.getElementById('ev-inhoud').innerHTML = '';
+}
+
+// ── TOAST ────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

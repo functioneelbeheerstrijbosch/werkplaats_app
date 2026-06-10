@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Functies Overzicht — Werkplaats App</title>
+<style>
+  :root {
+    --bg:      #f0f4f8;
+    --bg2:     #ffffff;
+    --border:  #c8d8e8;
+    --text:    #001e3c;
+    --muted:   #5a7a9a;
+    --accent:  #ec6500;
+    --ok:      #1a8f4f;
+    --info:    #004582;
+    --danger:  #d93025;
+    --font:    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    --r:       6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .doc-sub { font-size: 13px; color: var(--muted); font-family: var(--mono); margin-bottom: 40px; }
+
+  /* TOC */
+  .toc { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 20px 24px; margin-bottom: 40px; }
+  .toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-family: var(--mono); margin-bottom: 12px; }
+  .toc ol { padding-left: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+  .toc li { font-size: 13px; }
+  .toc a { color: var(--info); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* Sections */
+  section { margin-bottom: 48px; }
+  section h2 {
+    font-size: 18px; font-weight: 700;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 6px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sec-badge {
+    font-size: 10px; font-family: var(--mono); font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; text-transform: uppercase;
+  }
+  .badge-app    { background: rgba(0,69,130,.12); color: var(--info); }
+  .badge-mgr    { background: rgba(236,101,0,.12); color: var(--accent); }
+  .badge-beide  { background: rgba(26,143,79,.12); color: var(--ok); }
+
+  /* Function card */
+  .fn-kaart {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .fn-header {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: #f8fbff;
+  }
+  .fn-naam {
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+    color: var(--info);
+  }
+  .fn-bestand {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+  }
+  .fn-async {
+    font-family: var(--mono); font-size: 10px; color: var(--ok);
+    background: rgba(26,143,79,.1); border-radius: 4px; padding: 1px 6px;
+    font-weight: 600;
+  }
+  .fn-body { padding: 14px 16px; }
+  .fn-desc { font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+  .fn-body dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 13px; }
+  .fn-body dt { font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .fn-body dd { color: var(--text); line-height: 1.5; }
+  code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px; color: var(--text);
+  }
+  .pill {
+    display: inline-block; font-size: 10px; font-family: var(--mono);
+    padding: 1px 7px; border-radius: 10px; font-weight: 600;
+    vertical-align: middle; margin-left: 4px;
+  }
+  .pill-status { background: rgba(0,69,130,.1); color: var(--info); }
+  .pill-db     { background: rgba(217,48,37,.1); color: var(--danger); }
+  .fn-stroom {
+    font-size: 12px; font-family: var(--mono); color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px 12px; margin-top: 8px; line-height: 1.8;
+  }
+  .pijl { color: var(--accent); font-weight: 700; }
+  @media print {
+    body { padding: 20px; }
+    .toc ol { grid-template-columns: 1fr; }
+    .fn-kaart { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Functies Overzicht</h1>
+<p class="doc-sub">Werkplaats App — Strijbosch &nbsp;|&nbsp; werkplaats_app.html &amp; werkplaats_manager.html &nbsp;|&nbsp; Gegenereerd 2026-05-05</p>
+
+<div class="toc">
+  <h2>Inhoudsopgave</h2>
+  <ol>
+    <li><a href="#s1">Authenticatie &amp; Sessie</a></li>
+    <li><a href="#s2">Data ophalen (Supabase)</a></li>
+    <li><a href="#s3">Realtime updates</a></li>
+    <li><a href="#s4">Weergave — App (renderLists)</a></li>
+    <li><a href="#s5">Weergave — Manager (renderBoard)</a></li>
+    <li><a href="#s6">Claimen van opdrachten</a></li>
+    <li><a href="#s7">Afronden van opdrachten</a></li>
+    <li><a href="#s8">Tagnummer scan systeem</a></li>
+    <li><a href="#s9">Vragen &amp; vragensets</a></li>
+    <li><a href="#s10">Timer / Klok</a></li>
+    <li><a href="#s11">Drag-and-drop (Manager)</a></li>
+    <li><a href="#s12">Hulpfuncties</a></li>
+  </ol>
+</div>
+
+<!-- ── 1. AUTHENTICATIE ──────────────────────────────────────────── -->
+<section id="s1">
+  <h2>1. Authenticatie &amp; Sessie <span class="sec-badge badge-beide">App + Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">signIn()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Verwerkt het loginformulier. Leest e-mailadres en wachtwoord uit de invoervelden en stuurt ze naar Supabase Auth. Bij succes wordt <code>verwerkSessie()</code> aangeroepen; bij fout verschijnt een foutmelding in het formulier.</p>
+      <dl>
+        <dt>Aanroept</dt><dd><code>sb.auth.signInWithPassword()</code> → <code>verwerkSessie(user)</code></dd>
+        <dt>Foutafhandeling</dt><dd>Toont "Onjuist e-mailadres of wachtwoord" in het formulier; logt nooit de reden naar de console.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">verwerkSessie(user)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Koppelt de ingelogde Supabase-gebruiker aan een monteur-record. Zoekt in de <code>monteurs</code>-tabel op <code>auth_user_id</code>. Als er geen match is (het account bestaat wel in Auth maar niet in de monteurs-tabel) wordt de sessie direct beëindigd met een melding om beheer te contacteren.</p>
+      <dl>
+        <dt>Doel</dt><dd>Zorgt dat alleen geregistreerde monteurs de app kunnen gebruiken, niet alleen iemand met een Supabase-account.</dd>
+        <dt>Aanroept</dt><dd><code>kiesMontreur(monteur)</code> bij succes, anders <code>sb.auth.signOut()</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">kiesMontreur(m)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Stel de actieve monteur in en start de app. Vult de initialen/naam in de header, verbergt het loginscherm, toont het app-shell, en activeert alle benodigde laad- en realtime-functies. Beheerderstabs worden alleen zichtbaar als <code>m.is_admin</code> of <code>m.is_onderdelenbeheerder</code>.</p>
+      <dl>
+        <dt>Bijwerkt</dt><dd><code>state.monteur</code> — de globale staat van de ingelogde gebruiker</dd>
+        <dt>Start</dt><dd><code>setupRealtime()</code>, <code>laadReparaties()</code>, <code>laadOnderdelen()</code>, <code>laadVragensets()</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadNaInlog(user)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Equivalent van <code>verwerkSessie + kiesMontreur</code> voor de manager-omgeving. Haalt de monteur op, controleert of die <code>is_admin</code> is, en start <code>laadData()</code> + <code>startRealtime()</code>. Niet-admins worden direct uitgelogd.</p>
+      <dl>
+        <dt>Toegangsbeheer</dt><dd>Alleen <code>is_admin = true</code> monteurs kunnen de manager openen.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ── 2. DATA OPHALEN ────────────────────────────────────────────── -->
+<section id="s2">
+  <h2>2. Data ophalen (Supabase) <span class="sec-badge badge-beide">App + Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadReparaties()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Hoofdlaadfunction van de app. Haalt alle reparatieregels op via <code>fetchReparaties()</code>, laadt de afgeronde logs voor de periode-filter, en bouwt de set van handmatig aangemaakte regels op. Eindigt altijd met <code>renderLists()</code>.</p>
+      <dl>
+        <dt>Demo-mode</dt><dd>Als <code>state.demoMode</code> actief is worden testdata gebruikt in plaats van Supabase.</dd>
+        <dt>Bijwerkt</dt><dd><code>state.reparaties</code>, <code>state.afgerondLogs</code>, <code>handmatigAangemaakteIds</code></dd>
+        <dt>Aanroept</dt><dd><code>fetchReparaties()</code> → <code>laadAfgerondLogs()</code> → <code>renderLists()</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadAfgerondLogs()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Haalt <code>reparatie_logs</code> op met <code>actie = 'afgerond'</code> voor de huidige monteur, gefilterd op de datum-range in de afgerond-tab. Wordt aangeroepen bij elke refresh en bij het wijzigen van de datumfilter.</p>
+      <dl>
+        <dt>Filtert op</dt><dd>Datum-range (van/t.m.) + <code>monteur_id</code> van de ingelogde monteur</dd>
+        <dt>Bijwerkt</dt><dd><code>state.afgerondLogs</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadData()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Laadt alle benodigde data voor de manager in één <code>Promise.all</code>: reparaties (max 2000), monteurs, onderdelen, afgeronde logs (laatste 90 dagen), en tagnr_scans (max 5000). Roept daarna alle render-functies aan.</p>
+      <dl>
+        <dt>Tabellen</dt><dd><code>reparaties</code>, <code>monteurs</code>, <code>onderdelen</code>, <code>reparatie_logs</code>, <code>tagnr_scans</code></dd>
+        <dt>Bijwerkt</dt><dd><code>alleReparaties</code>, <code>alleMonteurs</code>, <code>alleOnderdelen</code>, <code>alleLogs</code>, <code>alleTagnrScans</code></dd>
+        <dt>Aanroept</dt><dd><code>vulFilters()</code> → <code>renderBoard()</code> → <code>renderVoorraad()</code> → <code>renderAfgerond()</code> → <code>renderDashboard()</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadOnderdelen()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Laadt de onderdelencatalogus uit de <code>onderdelen</code>-tabel gesorteerd op naam. Wordt gebruikt om inkooporders te maken vanuit de detailweergave van een reparatie.</p>
+      <dl>
+        <dt>Bijwerkt</dt><dd><code>alleOnderdelen</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadArtikelVoorraad()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Haalt voorraadstanden op uit de <code>artikel_voorraad</code>-tabel en bouwt een lookup-object op sleutel artikelcode. Wordt gebruikt om het voorraad-badge (groen/oranje/rood) in detailschermen te tonen.</p>
+      <dl>
+        <dt>Bijwerkt</dt><dd><code>artikelVoorraad</code> — object: <code>{ [artikelcode]: { aantal, min_aantal } }</code></dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. REALTIME ──────────────────────────────────────────────── -->
+<section id="s3">
+  <h2>3. Realtime updates <span class="sec-badge badge-beide">App + Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">setupRealtime()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Opent een Supabase Realtime-kanaal op de <code>reparaties</code>-tabel. Bij elke wijziging in de database (INSERT, UPDATE, DELETE) wordt automatisch <code>laadReparaties()</code> aangeroepen — zodat alle monteurs direct de actuele status zien zonder handmatig te vernieuwen.</p>
+      <dl>
+        <dt>Kanaal</dt><dd><code>'app-live'</code> — luistert op <code>postgres_changes</code> voor alle events op <code>public.reparaties</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">startRealtime()</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Manager-versie van de realtime listener. Luistert op zowel <code>reparaties</code> als <code>voorraad_taken</code>. Bij een UPDATE past het de lokale <code>alleReparaties</code>-array direct aan (optimistisch) en rendert het board opnieuw — zonder een volledige reload. Pas bij INSERT of DELETE volgt een volledige <code>laadData()</code> na 500ms debounce.</p>
+      <dl>
+        <dt>Optimistische update</dt><dd>Status-wijzigingen van monteurs zijn direct zichtbaar op het board zonder netwerkronde-trip.</dd>
+        <dt>Debounce</dt><dd>500ms — voorkomt meerdere gelijktijdige reloads bij bulkwijzigingen.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">refreshApp()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Handmatige vernieuwknop boven in de app. Zet de refresh-knop in draaiende staat, roept <code>laadReparaties()</code> aan, en toont een toast-bevestiging. Gebruikt wanneer realtime een update heeft gemist of de monteur zeker wil zijn van actuele data.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. RENDER APP ─────────────────────────────────────────────── -->
+<section id="s4">
+  <h2>4. Weergave — App <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderLists()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Centrale weergavefunctie van de app. Verdeelt <code>state.reparaties</code> over de drie tabs (Open, In behandeling, Afgerond) na filtering op de actieve monteur en eventuele zoekfilters. Rendert elke lijst met groepkaarten (per opdrachtnummer) of afzonderlijke kaarten voor voorraad-opdrachten.</p>
+      <dl>
+        <dt>Tabs</dt><dd>Open (status 445/450), In behandeling (status 465 van mijn monteur), Afgerond (uit <code>state.afgerondLogs</code>)</dd>
+        <dt>Sortering</dt><dd>Op prioriteit (spoed → hoog → normaal → laag), daarna op aanmaakdatum</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">groepCardHTML(regels, mijnId, modus, logs)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Bouwt de HTML voor een opdrachtgroep-kaart: koptekst met opdrachtnummer + klant, gevolgd door één rij per reparatieregel. Bevat de Claim-knop (als er nog niet geclaimed is), de timer-knop, en de afrond-knop. Regels met <code>doorsluizenjn = 'N'</code> worden als subregels (N-regels) weergegeven.</p>
+      <dl>
+        <dt>Speciale regels</dt><dd>Instructieregels (artikelcode <code>99-werkplaats</code>) worden apart weergegeven als blauwe tips.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">openDetail(id)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Opent het detailmodal van een reparatieregel. Vult alle velden in: opdrachtnummer, klacht, klant, apparaat, tagnummer + memogeschiedenis, artikelcode + voorraad-badge, deadline, werklog. Toont of verbergt secties op basis van aanwezige data.</p>
+      <dl>
+        <dt>Bijwerkt</dt><dd><code>state.activeMod</code> — de reparatie die momenteel open staat in een modal</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">voorraadBadgeHTML(artikelcode)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Geeft een gekleurde badge terug op basis van de voorraadstand: groen (op voorraad), oranje (onder minimumdrempel), rood (0 stuks). Retourneert een lege string als er geen voorraaddata beschikbaar is voor die artikelcode.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 5. RENDER MANAGER ──────────────────────────────────────────── -->
+<section id="s5">
+  <h2>5. Weergave — Manager <span class="sec-badge badge-mgr">Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderBoard()</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Vernieuwt het volledige kanban-board. Roept <code>renderOnverdeeld()</code> aan voor de linkerkolom (opdrachten zonder monteur) en <code>renderMonteurs()</code> voor de per-monteur kolommen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderOnverdeeld()</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Toont alle opdrachten waarvoor nog geen monteur is toegewezen. Groepeert regels per opdrachtnummer en sorteert op uiterste_datum_afdeling (vroegste deadline bovenaan). Toont de groepen als sleepbare kaarten.</p>
+      <dl>
+        <dt>Drop-target</dt><dd>Kaarten kunnen naar een monteurkolom worden gesleept om toe te wijzen.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderMonteurs()</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Bouwt voor elke actieve monteur een kolom op het board. Filtert volledig afgeronde opdrachten eruit. Voegt een <code>+</code>-knop toe waarmee verborgen monteurs teruggezet kunnen worden.</p>
+      <dl>
+        <dt>Verbergen</dt><dd>Monteurs kunnen tijdelijk verborgen worden via het ⋯-menu per kolom. De keuze wordt lokaal opgeslagen in <code>localStorage</code>.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">groepeerPerOpdracht(lijst)</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Groepeert een array van reparatieregels op opdrachtnummer. Filtert regels met <code>doorsluizenjn = 'N'</code> en instructieregels (artikelcode <code>99-werkplaats</code>) automatisch uit. Sorteert de groepen op deadline.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderDashboard()</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Rendert het dashboard-tabblad met statistieken en grafieken. Toont een SVG-uursgrafiek (werkbelasting per uur van de dag) en een SVG-daggrafiek (productiviteit per dag van de week) op basis van afgeronde logs.</p>
+      <dl>
+        <dt>Filtert op</dt><dd>Datum-range + geselecteerde monteur/artikelcode</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">renderAfgerond()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Toont alle afgeronde opdrachten in de afgerond-tab van de manager. Groepeert logs per opdrachtnummer en toont per opdracht: monteur, tijdstip, bestede tijd, diagnose en gebruikte onderdelen. Biedt een "Heropenen"-knop om opdrachten terug in de wachtrij te zetten.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">heropendOpdracht(nr)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Zet een afgeronde opdracht terug naar status <code>450</code> (open/wachtrij). Verwijdert de monteur-koppeling en alle tijdstempels. Wordt gebruikt als een opdracht abusievelijk afgerond is of opnieuw uitgevoerd moet worden.</p>
+      <dl>
+        <dt>Status-overgang</dt><dd><span class="pill pill-status">519 afgerond</span> → <span class="pill pill-status">450 open</span></dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ── 6. CLAIMEN ────────────────────────────────────────────────── -->
+<section id="s6">
+  <h2>6. Claimen van opdrachten <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">claimAlles(ids, event, vanuitSelectie)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Opent het claim-preview modal. Toont alle te claimen regels met artikelcode, apparaattype en een knop voor artikelhistorie. Werkt zowel voor het claimen van een hele opdracht als voor een selectie van losse regels.</p>
+      <dl>
+        <dt>Bewaarstand</dt><dd>Slaat de te claimen ids op in <code>_claimAllesIds</code> tot bevestiging.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">bevestigClaimAlles()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Voert het claimen definitief uit. Zet status op <code>465</code> (in behandeling) en koppelt de monteur. Detecteert automatisch bijbehorende N-regels (doorsluizenjn = 'N') die mee geclaimd moeten worden als alle J-regels van de opdracht geclaimd worden.</p>
+      <dl>
+        <dt>Status-overgang</dt><dd><span class="pill pill-status">445/450 open</span> → <span class="pill pill-status">465 in behandeling</span></dd>
+        <dt>Logt</dt><dd>Actie <code>'start'</code> in <code>reparatie_logs</code> voor elke geclaimde regel. <span class="pill pill-db">DB-schrijfactie</span></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">vrijgeefRegel(id)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Geeft één regel terug aan de wachtrij door status terug te zetten naar <code>445</code> en de monteur-koppeling te verwijderen. Logt de actie als <code>'vrijgegeven'</code>.</p>
+      <dl>
+        <dt>Status-overgang</dt><dd><span class="pill pill-status">465 in behandeling</span> → <span class="pill pill-status">445 open</span></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">vrijgeefAlles(ids, opdrachtnr, event)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Geeft een hele opdracht vrij. Inclusief eventuele N-regels die mee zijn geclaimd. Itereert over alle regels en schrijft per stuk een log-actie <code>'vrijgegeven'</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 7. AFRONDEN ───────────────────────────────────────────────── -->
+<section id="s7">
+  <h2>7. Afronden van opdrachten <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">openAfrond(id)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Startpunt van de afrond-workflow voor één reparatieregel. Regisseert de volgorde: werkcheck (verplichte taken afvinken) → vragenqueue → tagnr-scanqueue (niet voor voorraad) → afrondformulier.</p>
+      <div class="fn-stroom">
+        openWerkCheck <span class="pijl">→</span> startVragenQueue <span class="pijl">→</span> startTagnrScanQueue <span class="pijl">→</span> _openAfrondDirect
+      </div>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">openWerkCheck(taken, onConfirm)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Toont een checklistmodal met verplichte werkzaamheden die de monteur moet bevestigen voordat hij kan afronden. Elke taak is een checkbox; de "Doorgaan"-knop wordt pas actief als alle taken zijn aangevinkt. Als er geen taken zijn, wordt <code>onConfirm</code> direct aangeroepen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">_openAfrondDirect(id)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Opent het afrondformulier. Vult de gemeten kloktijd als adviestijd in de uren/minuten-velden. Laadt eerder ontvangen inkooporders als gebruikte onderdelen. Toont antwoorden van ingevulde vragenlijsten. Toont de opdracht-chips voor snelle invoer in het tekstveld.</p>
+      <dl>
+        <dt>Pre-vult</dt><dd>Kloktijd, ontvangen onderdelen, vragenantwoorden, diagnostische chips</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">afrondReparatie(uitkomst)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">De schrijfactie van het afronden. Zet status op <code>519</code>, schrijft een log-rij met diagnose, werkzaamheden, bestede tijd en gebruikte onderdelen, slaat tagnr-scans op, en wist de klok. Vraagt bevestiging als het ingevoerde uren-aantal ≥ 10.</p>
+      <dl>
+        <dt>Status-overgang</dt><dd><span class="pill pill-status">465 in behandeling</span> → <span class="pill pill-status">519 afgerond</span></dd>
+        <dt>Logt</dt><dd>Actie <code>'afgerond'</code> in <code>reparatie_logs</code> met notitie, onderdelen, tijdsduur. <span class="pill pill-db">DB-schrijfactie</span></dd>
+        <dt>Daarna</dt><dd>Roept <code>laadReparaties()</code> aan en switcht de tab naar "Afgerond"</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">openBulkAfrond(ids, opdrachtnr, event)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Opent de bulk-afrond modal voor meerdere regels tegelijk (één complete opdracht). Controleert live in de database of alle regels status 465 hebben én van deze monteur zijn — anders wordt het afronden geblokkeerd. Verdeelt de gemeten kloktijd evenredig over de regels als startwaarde.</p>
+      <dl>
+        <dt>REP-modus</dt><dd>Opdrachten met opdrachtcode die begint met 'REP' krijgen per-regel invoervelden voor diagnose en werkzaamheden.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">bevestigBulkAfrond()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Voert het bulk-afronden definitief uit. Itereert over alle regels, schrijft per stuk een log-rij en zet de status op <code>519</code>. De uren/minuten per regel worden samengevoegd tot één getal in minuten per log-rij.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">verwijderVoorraadReparatie(id)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Verwijdert een voorraad-opdracht volledig. Verwijdert eerst de gekoppelde <code>tagnr_scans</code>, daarna de <code>reparatie_logs</code>, en tot slot de <code>reparaties</code>-rij zelf. Voorraad-opdrachten kunnen niet vrijgegeven worden — alleen verwijderd.</p>
+      <dl>
+        <dt>Cascade-volgorde</dt><dd><code>tagnr_scans</code> → <code>reparatie_logs</code> → <code>reparaties</code></dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ── 8. TAGNR ──────────────────────────────────────────────────── -->
+<section id="s8">
+  <h2>8. Tagnummer scan systeem <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">startTagnrScanQueue(ids, onDone)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Start de tagnummer-invoer wachtrij. Filtert uit de gegeven reparatie-ids die waarvoor <code>tagnrscannenjn = 'J'</code> geldt. Bouwt een queue-array op met per item: id, label en het vereiste aantal tagnummers. Als er niets te scannen is, wordt <code>onDone</code> direct aangeroepen.</p>
+      <dl>
+        <dt>Globale state</dt><dd><code>_tagnrQueue</code>, <code>_tagnrQueueIdx</code>, <code>_tagnrGescand</code> (Map), <code>_tagnrOnDone</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">_openTagnrScherm()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Toont het tagnummer-invoerscherm voor het huidige item in de queue. Als de queue uitgeput is, wordt het scherm gesloten en <code>onDone</code> aangeroepen. Toont de voortgang (artikel X van Y), wist het invoerveld en focust het automatisch.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">voegTagnrToe()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Voegt het getypte/gescande tagnummer toe aan de lijst voor het huidige artikel. Valideert dat het maximum (gelijk aan <code>aantal</code> van de reparatieregel) niet overschreden wordt. Als het maximum bereikt is, gaat het systeem automatisch door naar het volgende item in de queue.</p>
+      <dl>
+        <dt>Invoermethoden</dt><dd>Toetsenbord (Enter), barcode-scanner (CR/LF), of de + knop</dd>
+        <dt>Auto-advance</dt><dd>Bij bereikt maximum wordt na 150ms automatisch <code>bevestigTagnrRegel()</code> aangeroepen.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">bevestigTagnrRegel()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">"Volgende"-knop handler. Flusht eventuele getypte waarde uit het invoerveld (handig als aantal = 1 en de monteur niet op Enter heeft gedrukt). Valideert dat het vereiste aantal tagnummers ingevoerd is. Schuift daarna de queue-index op naar het volgende artikel.</p>
+      <dl>
+        <dt>Flush-logica</dt><dd>Als het invoerveld een waarde heeft én het maximum niet bereikt is, wordt de waarde eerst toegevoegd vóór de validatiecheck.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">_insertTagnrScans(logId, reparatieId, ...)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Schrijft de verzamelde tagnummers naar de <code>tagnr_scans</code>-tabel. Eén rij per tagnummer, gekoppeld aan de log-rij (<code>reparatie_log_id</code>), de reparatie, het opdrachtnummer, regelnummer, artikelcode en monteur. Wordt aangeroepen vanuit <code>afrondReparatie()</code>.</p>
+      <dl>
+        <dt>Tabel</dt><dd><code>tagnr_scans</code> — elke scan is een aparte rij <span class="pill pill-db">DB-schrijfactie</span></dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ── 9. VRAGENSETS ─────────────────────────────────────────────── -->
+<section id="s9">
+  <h2>9. Vragen &amp; vragensets <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">startVragenQueue(ids, onDone)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Start de vragenlijst-wachtrij. Bepaalt per reparatie welke vragensets van toepassing zijn op basis van artikelcode, betalercode, opdrachtcode, productgroep en organisatie. Onderscheidt per-artikel vragen (eenmalig per reparatieregel) en per-opdracht vragen (eenmalig per opdrachtnummer). Als er geen vragen zijn, wordt <code>onDone</code> direct aangeroepen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">vindVragensettenVoor(artikelcode, betalercode, ...)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Filtert de geladen vragensets op basis van de eigenschappen van een reparatie. Lege velden in de vragenset-definitie werken als wildcard. Alleen actieve vragensets worden teruggegeven.</p>
+      <dl>
+        <dt>Matchinglogica</dt><dd>Alle ingevulde velden van de set moeten overeenkomen; lege velden worden overgeslagen.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">laadVragensets()</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Haalt alle vragensets op uit Supabase inclusief geneste vragen en antwoordopties. Admins zien ook de beheerpagina voor vragensets. Wordt aangeroepen bij het starten van de app.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 10. TIMER ─────────────────────────────────────────────────── -->
+<section id="s10">
+  <h2>10. Timer / Klok <span class="sec-badge badge-app">App</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">toggleKlokVanuitLijst(id)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Start of pauzeert de timer voor een reparatieregel vanuit de lijstweergave (de kleine ▶/⏹ knop naast de groep-header). De looptijd wordt opgeslagen in <code>localStorage</code>. Bij pauzeren wordt de sessieduur gelogd in <code>reparatie_logs</code> met actie <code>'klok_gestopt'</code>.</p>
+      <dl>
+        <dt>Opslag</dt><dd><code>localStorage</code> per regel-id — blijft bewaard als de pagina ververst wordt.</dd>
+        <dt>Logt</dt><dd><code>'klok_gestart'</code> bij start, <code>'klok_gestopt'</code> bij pauze. Inclusief totale gemeten tijd. <span class="pill pill-db">DB-schrijfactie</span></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">startKlokTick() / stopKlokTick()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Beheert het 1-seconde interval dat de kloktijd in de actieve reparatie-modal bijwerkt. <code>startKlokTick()</code> start het interval, <code>stopKlokTick()</code> wist het. Worden aangeroepen bij het openen/sluiten van het modal en bij het afronden.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">getTotaalKlokMs(id)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Geeft de totaal gemeten tijd in milliseconden terug voor een reparatieregel. Combineert opgeslagen elapsed-tijd (uit eerdere sessies) en de lopende sessie (huidig timestamp minus starttijd).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 11. DRAG AND DROP ─────────────────────────────────────────── -->
+<section id="s11">
+  <h2>11. Drag-and-drop <span class="sec-badge badge-mgr">Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">onDrop(e, monteurId)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Verwerkt het loslaten van een opdrachtgroep-kaart op een monteurkolom. Wijst alle regels van de opdracht toe aan de doelmonteur door status op <code>465</code> te zetten en <code>monteur_id</code> in te vullen. Blokkeert realtime-updates tijdelijk om een race-condition met Supabase te voorkomen.</p>
+      <dl>
+        <dt>Status-overgang</dt><dd><span class="pill pill-status">445/450 open</span> → <span class="pill pill-status">465 toegewezen</span></dd>
+        <dt>Anti-race</dt><dd>Zet <code>realtimeBlocked = true</code> tijdens het schrijven, vrijgegeven na 2 seconden.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">onDropBestel(e)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Verwerkt het slepen van een opdracht naar de "bestellen"-zone. Maakt een <code>voorraad_taak</code>-rij aan die het onderdeel markeert als te bestellen. Toont een bevestiging met het artikelnummer en de monteur voor wie het besteld wordt.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── 12. HULPFUNCTIES ──────────────────────────────────────────── -->
+<section id="s12">
+  <h2>12. Hulpfuncties <span class="sec-badge badge-beide">App + Manager</span></h2>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">isRegelAfgerond(r)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Bepaalt of een reparatieregel als afgerond beschouwd moet worden. Een regel is afgerond als <code>status = '519'</code> OF als <code>afgerond_op</code> gevuld is. De dubbele check voorkomt dat externe syncs die de status terugzetten een al-afgeronde opdracht opnieuw laten verschijnen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">isInstructieRegel(r)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Geeft <code>true</code> terug als een reparatieregel een werkplaats-instructie is (artikelcode <code>99-werkplaats</code>). Instructieregels worden niet geclaimd of afgerond — ze zijn alleen informatief voor de monteur.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">insertLog(data)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Centrale schrijffunctie voor de audit-trail. Voegt een rij toe aan <code>reparatie_logs</code>. Elke statuswijziging (start, vrijgeven, afronden, klok) gaat via deze functie. Geeft de aangemaakte rij terug zodat de id gebruikt kan worden voor gekoppelde records (bijv. tagnr_scans).</p>
+      <dl>
+        <dt>Acties</dt><dd><code>'start'</code>, <code>'vrijgegeven'</code>, <code>'afgerond'</code>, <code>'klok_gestart'</code>, <code>'klok_gestopt'</code>, <code>'regel_toegevoegd'</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">updateReparatieStatus(id, data)</span>
+      <span class="fn-async">async</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Wrapper om een rij in de <code>reparaties</code>-tabel bij te werken. Gooit een fout als Supabase een foutmelding teruggeeft zodat de aanroepende functie de afhandeling kan doen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">toast(msg)</span>
+      <span class="fn-bestand">werkplaats_app.html &amp; werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Toont een korte notificatie onderaan het scherm die na 2 seconden automatisch verdwijnt. Wordt gebruikt voor bevestigingen ("✓ Afgerond"), waarschuwingen en foutmeldingen die geen modal vereisen.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">esc(s)</span>
+      <span class="fn-bestand">werkplaats_app.html &amp; werkplaats_manager.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Escapet HTML-tekens (<code>&lt; &gt; &amp; " '</code>) in een string zodat gebruikersinput veilig in HTML-templates ingevoegd kan worden. Voorkomt XSS bij het tonen van opdrachtnummers, klantnamen en andere data uit de database.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">herberekeenBulkTijd()</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Herberekent het totaal van alle ingevoerde uren en minuten in het bulk-afrond scherm en vergelijkt dit met de gemeten kloktijd. Toont een waarschuwing als er te veel of te weinig tijd is gealloceerd ten opzichte van de klok.</p>
+    </div>
+  </div>
+
+  <div class="fn-kaart">
+    <div class="fn-header">
+      <span class="fn-naam">vulRegelChips(containerId, textareaId, opdrachtnr)</span>
+      <span class="fn-bestand">werkplaats_app.html</span>
+    </div>
+    <div class="fn-body">
+      <p class="fn-desc">Plaatst klikbare chips (knopjes) boven een tekstveld met de artikelcodes van J-regels van de opdracht. Klikken op een chip voegt de artikelcode in op de cursorpositie in het tekstveld — snelle invoer voor diagnoses en notities.</p>
+    </div>
+  </div>
+</section>
+
+<p style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:60px;border-top:1px solid var(--border);padding-top:16px">
+  Werkplaats App — Strijbosch &nbsp;·&nbsp; Intern document &nbsp;·&nbsp; 2026-05-05
+</p>
+
+</body>
+</html>
