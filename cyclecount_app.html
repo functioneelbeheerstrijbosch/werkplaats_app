@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Cycle Count</title>
+<meta name="theme-color" content="#004582">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+:root {
+  --bg:     #f0f4f8;
+  --bg2:    #ffffff;
+  --bg3:    #e4ecf4;
+  --border: #c8d8e8;
+  --text:   #001e3c;
+  --muted:  #5a7a9a;
+  --accent: #ec6500;
+  --ok:     #1a8f4f;
+  --danger: #d93025;
+  --info:   #004582;
+  --warn:   #f59e0b;
+  --font:   ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono:   ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --r:      6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
+
+/* ── LOGIN ── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 100;
+  background: #004582;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0; padding: 0; overflow: hidden;
+}
+#login-screen.hidden { display: none; }
+.login-illustratie {
+  position: absolute; inset: 0;
+  background-image: url('https://cms.strijbosch.nl/wp-content/uploads/illustration.png');
+  background-size: cover; background-position: center;
+  opacity: 0.06; pointer-events: none;
+}
+.login-kaart {
+  position: relative; z-index: 1;
+  background: #ffffff; border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+  padding: 36px 28px 28px; width: 100%; max-width: 340px;
+  display: flex; flex-direction: column; align-items: center; gap: 20px; margin: 24px;
+}
+.login-logo-img { height: 44px; width: auto; }
+.login-divider { width: 100%; height: 1px; background: #c8d8e8; margin: -4px 0; }
+.login-title { font-size: 16px; font-weight: 600; text-align: center; color: #001e3c; }
+.login-form { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.login-input {
+  background: #f0f4f8; border: 1px solid #c8d8e8;
+  border-radius: var(--r); color: #001e3c;
+  font-family: var(--font); font-size: 15px; padding: 13px 14px;
+  transition: border-color .15s; width: 100%;
+}
+.login-input::placeholder { color: #5a7a9a; }
+.login-input:focus { outline: none; border-color: #ec6500; }
+.login-btn {
+  background: #ec6500; color: #fff; border: none;
+  border-radius: var(--r); font-family: var(--font);
+  font-size: 15px; font-weight: 600; padding: 13px;
+  cursor: pointer; margin-top: 4px; transition: opacity .15s; width: 100%;
+}
+.login-btn:active, .login-btn:disabled { opacity: .7; cursor: default; }
+.login-fout { font-size: 13px; color: var(--danger); text-align: center; min-height: 18px; }
+.login-footer {
+  position: relative; z-index: 1;
+  font-size: 11px; color: rgba(255,255,255,0.4);
+  font-family: var(--mono); letter-spacing: 0.08em; margin-top: 16px;
+}
+
+/* ── APP SHELL ── */
+#app { display: none; height: 100dvh; flex-direction: column; }
+#app.visible { display: flex; }
+
+/* ── HEADER ── */
+.header {
+  padding: 12px 16px 10px; background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.header-left { display: flex; flex-direction: column; gap: 1px; }
+.header-title { font-size: 15px; font-weight: 600; }
+.header-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.monteur-chip {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 10px 4px 6px;
+}
+.chip-dot {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #004582; border: 1px solid #0066cc;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 500; color: #fff;
+}
+.chip-name { font-size: 12px; font-weight: 500; }
+
+/* ── TAB BAR ── */
+.tab-bar {
+  display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; padding: 10px 8px; background: none; border: none;
+  font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+}
+.tab-btn.actief { color: var(--info); border-bottom-color: var(--info); }
+
+/* ── APP BODY ── */
+.app-body { flex: 1; min-height: 0; overflow-y: auto; }
+.card-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── VOORTGANG BALK ── */
+.voortgang-balk {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding: 8px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.voortgang-tekst { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.voortgang-track {
+  flex: 1; min-width: 100px; height: 6px;
+  background: var(--bg3); border-radius: 3px; overflow: hidden;
+}
+.voortgang-fill { height: 100%; background: var(--info); border-radius: 3px; transition: width .3s; }
+.voortgang-fill.klaar { background: var(--ok); }
+
+.datum-chip {
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 2px 8px; white-space: nowrap;
+}
+
+/* ── ARTIKEL KAART ── */
+.artikel-kaart {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden;
+}
+.artikel-kaart.cat-a { border-left: 3px solid var(--info); }
+.artikel-kaart.cat-overig { border-left: 3px solid var(--muted); }
+.artikel-kaart.geteld { border-left-color: var(--ok); opacity: .85; }
+.artikel-kaart.verschil { border-left-color: var(--danger); }
+
+.art-header {
+  padding: 12px 14px; display: flex; align-items: center;
+  justify-content: space-between; gap: 10px; cursor: pointer; user-select: none;
+}
+.art-header:active { background: var(--bg3); }
+.art-header-links { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.art-code { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.art-naam { font-size: 12px; color: var(--muted); }
+.art-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+
+.badge {
+  font-size: 10px; font-family: var(--mono); border-radius: 3px; padding: 1px 6px;
+  white-space: nowrap;
+}
+.badge-a    { background: rgba(0,69,130,.1); color: var(--info); border: 1px solid rgba(0,69,130,.3); }
+.badge-ov   { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); }
+.badge-ok   { background: rgba(26,143,79,.1); color: var(--ok); border: 1px solid rgba(26,143,79,.3); }
+.badge-af   { background: rgba(217,48,37,.1); color: var(--danger); border: 1px solid rgba(217,48,37,.3); }
+.badge-loc  { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); }
+
+.art-chevron { font-size: 12px; color: var(--muted); flex-shrink: 0; transition: transform .2s; }
+.art-chevron.open { transform: rotate(90deg); }
+
+/* ── TELFORMULIER ── */
+.tel-form {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px; display: none; flex-direction: column; gap: 10px;
+}
+.tel-form.open { display: flex; }
+
+.form-rij { display: flex; flex-direction: column; gap: 4px; }
+.form-label {
+  font-size: 10px; font-family: var(--mono); color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.form-input {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r); color: var(--text); font-family: var(--font);
+  font-size: 15px; padding: 10px 12px; transition: border-color .15s;
+}
+.form-input:focus { outline: none; border-color: var(--accent); background: var(--bg2); }
+.form-input.fout { border-color: var(--danger); background: rgba(217,48,37,.04); }
+.form-hint { font-size: 11px; color: var(--danger); }
+
+.tel-actie-rij { display: flex; gap: 8px; margin-top: 2px; }
+.btn-opslaan {
+  flex: 1; padding: 12px; border-radius: var(--r); border: none;
+  background: var(--info); color: #fff; font-family: var(--font);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.btn-opslaan:active { opacity: .8; }
+.btn-opslaan:disabled { opacity: .45; cursor: not-allowed; }
+.btn-annuleer-klein {
+  padding: 12px 16px; border-radius: var(--r); border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-family: var(--font);
+  font-size: 14px; cursor: pointer; transition: background .15s;
+}
+.btn-annuleer-klein:active { background: var(--bg3); }
+
+/* ── VERSCHIL WAARSCHUWING ── */
+.verschil-melding {
+  display: flex; gap: 8px; padding: 8px 10px;
+  background: rgba(217,48,37,.06); border: 1px solid rgba(217,48,37,.25);
+  border-radius: var(--r); font-size: 12px; color: var(--danger); align-items: flex-start;
+}
+.verschil-melding-icon { flex-shrink: 0; font-size: 14px; }
+
+/* ── RESULTAAT CHIP (na opslaan) ── */
+.art-resultaat {
+  border-top: 1px solid var(--border);
+  padding: 8px 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  font-size: 12px;
+}
+.res-goed { color: var(--ok); font-weight: 600; }
+.res-af   { color: var(--danger); font-weight: 600; }
+
+/* ── GESCHIEDENIS ── */
+.dag-blok { margin-bottom: 4px; }
+.dag-header {
+  padding: 8px 12px; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: var(--r);
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; user-select: none;
+}
+.dag-header:active { opacity: .8; }
+.dag-datum { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.dag-stats { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.dag-body { display: none; flex-direction: column; gap: 4px; padding: 4px 0 0; }
+.dag-body.open { display: flex; }
+
+.hist-rij {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 9px 12px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.hist-rij.met-verschil { border-left: 3px solid var(--danger); }
+.hist-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.hist-code { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.hist-naam { font-size: 11px; color: var(--muted); }
+.hist-telling { font-size: 11px; font-family: var(--mono); }
+.hist-toelichting { font-size: 11px; color: var(--danger); font-style: italic; }
+.hist-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.hist-tijd { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.75);
+  display: none; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px 12px 0 0; width: 100%; max-width: 500px;
+  padding: 20px 20px 28px; display: flex; flex-direction: column; gap: 12px;
+  max-height: 85dvh; overflow-y: auto;
+}
+.modal-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: 0 auto 4px; flex-shrink: 0;
+}
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-sub   { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.modal-btns  { display: flex; gap: 10px; margin-top: 4px; flex-shrink: 0; }
+.btn-annuleer {
+  flex: 1; padding: 12px; border-radius: var(--r); border: 1px solid var(--border);
+  background: transparent; color: var(--text); font-family: var(--font);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s;
+}
+.btn-annuleer:active { background: var(--bg3); }
+.btn-bevestig {
+  flex: 1; padding: 12px; border-radius: var(--r); border: none;
+  background: var(--info); color: #fff; font-family: var(--font);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.btn-bevestig:active { opacity: .8; }
+.btn-bevestig.danger { background: var(--danger); }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: #fff; font-size: 13px; font-weight: 500;
+  padding: 10px 18px; border-radius: 20px; z-index: 300;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+  white-space: nowrap; max-width: calc(100vw - 32px); text-align: center;
+}
+.toast.show { opacity: 1; }
+
+/* ── EMPTY / LOADING ── */
+.empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 200px; gap: 10px; color: var(--muted); font-size: 13px;
+}
+.empty-icon { font-size: 32px; opacity: .4; }
+.loading-rij {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 14px; display: flex; align-items: center; gap: 10px;
+}
+.loading-pulse {
+  background: var(--bg3); border-radius: 4px; animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── ADMIN KNOP ── */
+.nieuw-dag-btn {
+  width: 100%; padding: 13px; border-radius: var(--r); border: 1px dashed var(--border);
+  background: transparent; color: var(--muted); font-family: var(--font);
+  font-size: 13px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+.nieuw-dag-btn:hover { border-color: var(--info); color: var(--info); }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login-screen">
+  <div class="login-illustratie"></div>
+  <div class="login-kaart">
+    <img class="login-logo-img" src="https://cms.strijbosch.nl/wp-content/uploads/logo-dark.png" alt="Logo"
+         onerror="this.style.display='none'">
+    <div class="login-divider"></div>
+    <div class="login-title">Cycle Count — Inloggen</div>
+    <div class="login-form">
+      <input class="login-input" type="email" id="login-email" placeholder="E-mailadres"
+        onkeydown="if(event.key==='Enter')loginSubmit()">
+      <input class="login-input" type="password" id="login-ww" placeholder="Wachtwoord"
+        onkeydown="if(event.key==='Enter')loginSubmit()">
+      <button class="login-btn" id="login-btn" onclick="loginSubmit()">Inloggen</button>
+      <div class="login-fout" id="login-fout"></div>
+    </div>
+  </div>
+  <div class="login-footer">CYCLE COUNT MODULE</div>
+</div>
+
+<!-- ── APP ── -->
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <div class="header-title">Cycle Count</div>
+      <div class="header-sub" id="app-sub">Laden…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="herlaad()" title="Vernieuwen"
+        style="background:none;border:none;cursor:pointer;padding:6px;color:var(--muted);display:flex;align-items:center;border-radius:var(--r)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
+      <div class="monteur-chip">
+        <div class="chip-dot" id="chip-dot">?</div>
+        <span class="chip-name" id="chip-naam"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn actief" id="tab-vandaag" onclick="setTab('vandaag')">Vandaag</button>
+    <button class="tab-btn" id="tab-geschiedenis" onclick="setTab('geschiedenis')">Geschiedenis</button>
+  </div>
+
+  <div class="app-body">
+    <!-- VANDAAG -->
+    <div id="view-vandaag">
+      <div class="voortgang-balk">
+        <span class="datum-chip" id="datum-chip"></span>
+        <div class="voortgang-track"><div class="voortgang-fill" id="voortgang-fill" style="width:0%"></div></div>
+        <span class="voortgang-tekst" id="voortgang-tekst">0 / 20</span>
+      </div>
+      <div class="card-list" id="artikel-lijst"></div>
+    </div>
+
+    <!-- GESCHIEDENIS -->
+    <div id="view-geschiedenis" style="display:none">
+      <div class="card-list" id="geschiedenis-lijst"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VERSCHIL MODAL ── -->
+<div class="modal-overlay" id="modal-verschil">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Verschil verklaren</div>
+    <div class="modal-sub" id="verschil-modal-sub"></div>
+    <div class="verschil-melding">
+      <span class="verschil-melding-icon">⚠</span>
+      <span id="verschil-modal-tekst"></span>
+    </div>
+    <div class="form-rij">
+      <div class="form-label">Toelichting (verplicht)</div>
+      <textarea class="form-input" id="verschil-toelichting" rows="3"
+        placeholder="Beschrijf de reden van het verschil…"
+        style="resize:none;line-height:1.5"
+        oninput="validateToelichting()"></textarea>
+      <div class="form-hint" id="verschil-hint" style="display:none">Toelichting is verplicht bij een verschil</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-annuleer" onclick="sluitVerschilModal()">Terug</button>
+      <button class="btn-bevestig danger" id="verschil-bevestig-btn" onclick="bevestigVerschil()">Opslaan met verschil</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+const state = {
+  monteur:    null,
+  vandaag:    vandaagStr(),       // 'YYYY-MM-DD'
+  artikelen:  [],                 // alle artikelen uit masterlijst
+  dagSelectie:[],                 // artikelen van vandaag [{...artikel, geteld, sys_qty, geteld_qty, verschil, toelichting, opgeslagen_om}]
+  tellingen:  [],                 // history records
+  openKaart:  null,               // artikelcode van open kaart
+};
+
+let _verschilCb = null;           // callback na toelichting invullen
+
+function vandaagStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let _toastTimer = null;
+function toast(msg, duur = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), duur);
+}
+
+// ── TESTDATA MASTERLIJST ──
+const ARTIKELEN_MASTER = [
+  // Categorie A (hoge waarde / hoog beweging)
+  { code: 'ART-A001', naam: 'Wasmachine Bosch WAT28490', categorie: 'A', locatie: 'A-01-1', sys_voorraad: 12 },
+  { code: 'ART-A002', naam: 'Droger Bosch WTW85490',     categorie: 'A', locatie: 'A-01-2', sys_voorraad: 8  },
+  { code: 'ART-A003', naam: 'Vaatwasser Miele G5000',    categorie: 'A', locatie: 'A-02-1', sys_voorraad: 5  },
+  { code: 'ART-A004', naam: 'Koelkast AEG RCB73821',     categorie: 'A', locatie: 'A-02-2', sys_voorraad: 3  },
+  { code: 'ART-A005', naam: 'Wasmachine LG F4WN209S',    categorie: 'A', locatie: 'A-03-1', sys_voorraad: 20 },
+  { code: 'ART-A006', naam: 'Oven Siemens HB578A4',      categorie: 'A', locatie: 'A-03-2', sys_voorraad: 7  },
+  { code: 'ART-A007', naam: 'Vriezer Samsung RZ32C',     categorie: 'A', locatie: 'A-04-1', sys_voorraad: 4  },
+  { code: 'ART-A008', naam: 'Droger LG RC90U2AV2W',      categorie: 'A', locatie: 'A-04-2', sys_voorraad: 6  },
+  { code: 'ART-A009', naam: 'Koelkast Samsung RB38C',    categorie: 'A', locatie: 'A-05-1', sys_voorraad: 9  },
+  { code: 'ART-A010', naam: 'Vaatwasser Miele G7000',    categorie: 'A', locatie: 'A-05-2', sys_voorraad: 11 },
+  { code: 'ART-A011', naam: 'Wasmachine Siemens WG44',   categorie: 'A', locatie: 'A-06-1', sys_voorraad: 14 },
+  { code: 'ART-A012', naam: 'Oven AEG BPS556020M',       categorie: 'A', locatie: 'A-06-2', sys_voorraad: 2  },
+  { code: 'ART-A013', naam: 'Koelkast Bosch KGN39XIDR',  categorie: 'A', locatie: 'A-07-1', sys_voorraad: 5  },
+  { code: 'ART-A014', naam: 'Vriezer Liebherr GNP4355',  categorie: 'A', locatie: 'A-07-2', sys_voorraad: 3  },
+  { code: 'ART-A015', naam: 'Wasmachine Whirlpool FFB',  categorie: 'A', locatie: 'A-08-1', sys_voorraad: 17 },
+  // Categorie B / C / overig
+  { code: 'ART-B001', naam: 'Magnetron Panasonic NN',    categorie: 'B', locatie: 'B-01-1', sys_voorraad: 10 },
+  { code: 'ART-B002', naam: 'Stofzuiger Dyson V15',      categorie: 'B', locatie: 'B-01-2', sys_voorraad: 8  },
+  { code: 'ART-B003', naam: 'Koffiezetapparaat Philips', categorie: 'B', locatie: 'B-02-1', sys_voorraad: 25 },
+  { code: 'ART-B004', naam: 'Waterkoker DeLonghi KBO',   categorie: 'B', locatie: 'B-02-2', sys_voorraad: 30 },
+  { code: 'ART-B005', naam: 'Broodrooster Smeg TSF01',   categorie: 'B', locatie: 'B-03-1', sys_voorraad: 15 },
+  { code: 'ART-B006', naam: 'Mixer KitchenAid 5KSM',     categorie: 'B', locatie: 'B-03-2', sys_voorraad: 6  },
+  { code: 'ART-B007', naam: 'Frituurpan Philips HD9270',  categorie: 'C', locatie: 'B-04-1', sys_voorraad: 12 },
+  { code: 'ART-B008', naam: 'Strijkijzer Philips GC3920', categorie: 'C', locatie: 'B-04-2', sys_voorraad: 20 },
+  { code: 'ART-B009', naam: 'Haardroger Dyson Supersonic',categorie: 'C', locatie: 'B-05-1', sys_voorraad: 9  },
+  { code: 'ART-B010', naam: 'Scheerapparaat Philips S9',  categorie: 'C', locatie: 'B-05-2', sys_voorraad: 14 },
+  { code: 'ART-B011', naam: 'Tandenborstel Oral-B iO',    categorie: 'C', locatie: 'B-06-1', sys_voorraad: 40 },
+  { code: 'ART-B012', naam: 'Stoomreiniger Karcher SC5',  categorie: 'C', locatie: 'B-06-2', sys_voorraad: 5  },
+  { code: 'ART-B013', naam: 'Luchtontvochtiger DeLonghi', categorie: 'C', locatie: 'B-07-1', sys_voorraad: 7  },
+  { code: 'ART-B014', naam: 'Ventilator Dyson AM09',      categorie: 'C', locatie: 'B-07-2', sys_voorraad: 4  },
+  { code: 'ART-B015', naam: 'Espressomachine DeLonghi',   categorie: 'C', locatie: 'B-08-1', sys_voorraad: 11 },
+];
+
+// Opgeslagen tellingen per dag (localStorage als persistentie in demo)
+const STORAGE_KEY = 'cc_tellingen_v1';
+const SELECTIE_KEY = 'cc_selectie_v1';
+
+function laadOpgeslagen() {
+  try {
+    const t = localStorage.getItem(STORAGE_KEY);
+    const s = localStorage.getItem(SELECTIE_KEY);
+    state.tellingen   = t ? JSON.parse(t) : [];
+    const selecties   = s ? JSON.parse(s) : {};
+    const vandaag     = state.vandaag;
+
+    if (selecties[vandaag]) {
+      // herstel vandaag-selectie met tellingen erin
+      const geteldMap = {};
+      state.tellingen
+        .filter(t => t.datum === vandaag)
+        .forEach(t => { geteldMap[t.artikelcode] = t; });
+
+      state.dagSelectie = selecties[vandaag].map(code => {
+        const art = ARTIKELEN_MASTER.find(a => a.code === code);
+        if (!art) return null;
+        const telling = geteldMap[code];
+        return {
+          ...art,
+          geteld:        !!telling,
+          geteld_qty:    telling?.geteld_qty ?? null,
+          verschil:      telling?.verschil ?? null,
+          toelichting:   telling?.toelichting ?? null,
+          opgeslagen_om: telling?.opgeslagen_om ?? null,
+        };
+      }).filter(Boolean);
+    } else {
+      // genereer nieuwe selectie voor vandaag
+      state.dagSelectie = genereerDagSelectie(vandaag);
+      const nieuweSelecties = { ...selecties, [vandaag]: state.dagSelectie.map(a => a.code) };
+      localStorage.setItem(SELECTIE_KEY, JSON.stringify(nieuweSelecties));
+    }
+  } catch(e) {
+    console.error('Laden mislukt', e);
+    state.tellingen  = [];
+    state.dagSelectie = genereerDagSelectie(state.vandaag);
+  }
+}
+
+function slaSelectieOp() {
+  try {
+    const s = localStorage.getItem(SELECTIE_KEY);
+    const selecties = s ? JSON.parse(s) : {};
+    selecties[state.vandaag] = state.dagSelectie.map(a => a.code);
+    localStorage.setItem(SELECTIE_KEY, JSON.stringify(selecties));
+  } catch(e) {}
+}
+
+function slaTellingenOp() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tellingen));
+  } catch(e) {}
+}
+
+// Genereer dagelijks een deterministische maar roterende selectie
+// 10 cat-A + 10 overig, elke dag andere artikelen
+function genereerDagSelectie(datumStr) {
+  // Seed based on date so same day = same list
+  const seed = datumStr.replace(/-/g,'');
+  const seqNr = dagNummer(datumStr);
+
+  const catA   = ARTIKELEN_MASTER.filter(a => a.categorie === 'A');
+  const overig = ARTIKELEN_MASTER.filter(a => a.categorie !== 'A');
+
+  const selA   = roterend(catA,   10, seqNr);
+  const selOv  = roterend(overig, 10, seqNr + 7); // offset zodat A en overig niet synchroon lopen
+
+  return [...selA, ...selOv].map(art => ({
+    ...art,
+    geteld:        false,
+    geteld_qty:    null,
+    verschil:      null,
+    toelichting:   null,
+    opgeslagen_om: null,
+  }));
+}
+
+function dagNummer(datumStr) {
+  return Math.floor(new Date(datumStr).getTime() / 86400000);
+}
+
+function roterend(arr, n, offset) {
+  if (arr.length <= n) return [...arr];
+  const start = offset % arr.length;
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(arr[(start + i) % arr.length]);
+  return out;
+}
+
+// ── LOGIN ──
+async function loginSubmit() {
+  const email = document.getElementById('login-email').value.trim();
+  const ww    = document.getElementById('login-ww').value;
+  const fout  = document.getElementById('login-fout');
+  const btn   = document.getElementById('login-btn');
+
+  fout.textContent = '';
+  if (!email || !ww) { fout.textContent = 'Vul e-mailadres en wachtwoord in'; return; }
+
+  btn.disabled = true; btn.textContent = 'Bezig…';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: ww });
+  btn.disabled = false; btn.textContent = 'Inloggen';
+
+  if (error) { fout.textContent = 'Onjuist e-mailadres of wachtwoord'; return; }
+  await verwerkSessie(data.user);
+}
+
+async function verwerkSessie(user) {
+  try {
+    const { data: monteur, error } = await sb
+      .from('monteurs').select('*').eq('auth_user_id', user.id).single();
+    if (error || !monteur) throw new Error('Niet gevonden');
+    state.monteur = monteur;
+    const initialen = monteur.initialen ||
+      (monteur.naam ? monteur.naam.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() : '?');
+    document.getElementById('chip-dot').textContent  = initialen;
+    document.getElementById('chip-naam').textContent = monteur.naam?.split(' ')[0] || '';
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    await herlaad();
+  } catch(e) {
+    document.getElementById('login-fout').textContent = 'Account niet gekoppeld. Neem contact op met beheer.';
+    await sb.auth.signOut();
+  }
+}
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'INITIAL_SESSION' && session?.user && !state.monteur) {
+    await verwerkSessie(session.user);
+  }
+});
+
+async function herlaad() {
+  toonLoading();
+  await new Promise(r => setTimeout(r, 300));
+  laadOpgeslagen();
+  renderVandaag();
+  renderGeschiedenis();
+  updateSub();
+}
+
+function updateSub() {
+  const geteld  = state.dagSelectie.filter(a => a.geteld).length;
+  const totaal  = state.dagSelectie.length;
+  document.getElementById('app-sub').textContent =
+    `${geteld} / ${totaal} geteld vandaag`;
+}
+
+function toonLoading() {
+  document.getElementById('artikel-lijst').innerHTML = [1,2,3].map(() => `
+    <div class="loading-rij">
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="loading-pulse" style="width:90px;height:13px"></div>
+        <div class="loading-pulse" style="width:150px;height:11px"></div>
+      </div>
+    </div>`).join('');
+}
+
+// ── TABS ──
+function setTab(tab) {
+  document.getElementById('tab-vandaag').classList.toggle('actief', tab === 'vandaag');
+  document.getElementById('tab-geschiedenis').classList.toggle('actief', tab === 'geschiedenis');
+  document.getElementById('view-vandaag').style.display = tab === 'vandaag' ? '' : 'none';
+  document.getElementById('view-geschiedenis').style.display = tab === 'geschiedenis' ? '' : 'none';
+}
+
+// ── RENDER VANDAAG ──
+function renderVandaag() {
+  const artikelen = state.dagSelectie;
+  const geteld    = artikelen.filter(a => a.geteld).length;
+  const totaal    = artikelen.length;
+  const pct       = totaal ? Math.round(geteld / totaal * 100) : 0;
+
+  // datum chip
+  document.getElementById('datum-chip').textContent =
+    new Date(state.vandaag + 'T12:00:00').toLocaleDateString('nl-NL', { weekday:'short', day:'numeric', month:'long' });
+
+  // voortgang
+  const fill = document.getElementById('voortgang-fill');
+  fill.style.width = pct + '%';
+  fill.classList.toggle('klaar', geteld === totaal && totaal > 0);
+  document.getElementById('voortgang-tekst').textContent = `${geteld} / ${totaal}`;
+
+  if (!artikelen.length) {
+    document.getElementById('artikel-lijst').innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📋</div>
+        <span>Geen artikelen voor vandaag</span>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('artikel-lijst').innerHTML =
+    artikelen.map(a => artikelKaartHTML(a)).join('');
+}
+
+function artikelKaartHTML(art) {
+  const isOpen = state.openKaart === art.code;
+  const catKlasse = art.categorie === 'A' ? 'cat-a' : 'cat-overig';
+  const geteldKlasse = art.geteld
+    ? (art.verschil !== null && art.verschil !== 0 ? ' verschil' : ' geteld')
+    : '';
+
+  const catBadge = art.categorie === 'A'
+    ? `<span class="badge badge-a">Cat. A</span>`
+    : `<span class="badge badge-ov">Cat. ${esc(art.categorie)}</span>`;
+
+  const locBadge = art.locatie
+    ? `<span class="badge badge-loc">📦 ${esc(art.locatie)}</span>` : '';
+
+  const statusBadge = art.geteld
+    ? (art.verschil !== null && art.verschil !== 0
+        ? `<span class="badge badge-af">Verschil ${art.verschil > 0 ? '+' : ''}${art.verschil}</span>`
+        : `<span class="badge badge-ok">Akkoord</span>`)
+    : '';
+
+  let resultaatHTML = '';
+  if (art.geteld) {
+    const diffTekst = art.verschil !== null && art.verschil !== 0
+      ? `<span class="res-af">Verschil: ${art.verschil > 0 ? '+' : ''}${art.verschil} (sys: ${art.sys_voorraad}, geteld: ${art.geteld_qty})</span>`
+      : `<span class="res-goed">Akkoord — sys: ${art.sys_voorraad}, geteld: ${art.geteld_qty}</span>`;
+    const toelTekst = art.toelichting
+      ? `<span style="font-size:11px;color:var(--muted);font-style:italic">${esc(art.toelichting)}</span>` : '';
+    const tijdTekst = art.opgeslagen_om
+      ? `<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${art.opgeslagen_om.slice(11,16)}</span>` : '';
+    resultaatHTML = `<div class="art-resultaat">${diffTekst}${toelTekst}${tijdTekst}</div>`;
+  }
+
+  const telFormHTML = !art.geteld && isOpen ? `
+    <div class="tel-form open" id="form-${esc(art.code)}">
+      <div style="font-size:12px;color:var(--muted)">Systeemvoorraad: <strong style="color:var(--text);font-family:var(--mono)">${art.sys_voorraad}</strong></div>
+      <div class="form-rij">
+        <div class="form-label">Getelde aantallen</div>
+        <input class="form-input" type="number" id="qty-${esc(art.code)}" min="0"
+          placeholder="Voer getelde hoeveelheid in"
+          onkeydown="if(event.key==='Enter')slaaTellingOp('${esc(art.code)}')"
+          oninput="clearFout('qty-${esc(art.code)}')">
+        <div class="form-hint" id="hint-qty-${esc(art.code)}" style="display:none">Vul een getal in</div>
+      </div>
+      <div class="form-rij">
+        <div class="form-label">Opmerking (optioneel)</div>
+        <input class="form-input" type="text" id="opmerking-${esc(art.code)}"
+          placeholder="Bijv. locatie gecheckt, beschadiging…"
+          onkeydown="if(event.key==='Enter')slaaTellingOp('${esc(art.code)}')">
+      </div>
+      <div class="tel-actie-rij">
+        <button class="btn-annuleer-klein" onclick="sluitKaart()">Annuleren</button>
+        <button class="btn-opslaan" onclick="slaaTellingOp('${esc(art.code)}')">Opslaan</button>
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="artikel-kaart ${catKlasse}${geteldKlasse}" id="kaart-${esc(art.code)}">
+      <div class="art-header" onclick="toggleKaart('${esc(art.code)}')">
+        <div class="art-header-links">
+          <span class="art-code">${esc(art.code)}</span>
+          <span class="art-naam">${esc(art.naam)}</span>
+          <div class="art-meta">
+            ${catBadge}
+            ${locBadge}
+            ${statusBadge}
+          </div>
+        </div>
+        ${!art.geteld ? `<span class="art-chevron${isOpen ? ' open' : ''}" id="chev-${esc(art.code)}">▸</span>` : ''}
+      </div>
+      ${telFormHTML}
+      ${resultaatHTML}
+    </div>`;
+}
+
+function toggleKaart(code) {
+  const art = state.dagSelectie.find(a => a.code === code);
+  if (!art || art.geteld) return;
+
+  if (state.openKaart === code) {
+    state.openKaart = null;
+  } else {
+    state.openKaart = code;
+  }
+  renderVandaag();
+  if (state.openKaart) {
+    setTimeout(() => {
+      document.getElementById(`qty-${code}`)?.focus();
+    }, 50);
+  }
+}
+
+function sluitKaart() {
+  state.openKaart = null;
+  renderVandaag();
+}
+
+function clearFout(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('fout');
+}
+
+function slaaTellingOp(code) {
+  const art = state.dagSelectie.find(a => a.code === code);
+  if (!art) return;
+
+  const qtyEl  = document.getElementById(`qty-${code}`);
+  const qtyVal = qtyEl?.value.trim();
+  const hintEl = document.getElementById(`hint-qty-${code}`);
+
+  if (qtyVal === '' || isNaN(parseInt(qtyVal, 10)) || parseInt(qtyVal, 10) < 0) {
+    qtyEl?.classList.add('fout');
+    if (hintEl) hintEl.style.display = '';
+    qtyEl?.focus();
+    return;
+  }
+
+  const geteld_qty = parseInt(qtyVal, 10);
+  const verschil   = geteld_qty - art.sys_voorraad;
+  const opmerking  = document.getElementById(`opmerking-${code}`)?.value.trim() || '';
+
+  if (verschil !== 0) {
+    // Verschil gevonden → verplichte toelichting via modal
+    openVerschilModal(art, geteld_qty, verschil, opmerking);
+    return;
+  }
+
+  // Geen verschil → direct opslaan
+  registreerTelling(art, geteld_qty, 0, opmerking || null);
+}
+
+function registreerTelling(art, geteld_qty, verschil, toelichting) {
+  const now = new Date().toISOString();
+  const record = {
+    datum:        state.vandaag,
+    artikelcode:  art.code,
+    artikelnaam:  art.naam,
+    categorie:    art.categorie,
+    locatie:      art.locatie,
+    sys_voorraad: art.sys_voorraad,
+    geteld_qty,
+    verschil,
+    toelichting,
+    opgeslagen_om: now,
+    monteur_id:   state.monteur?.id || null,
+    monteur_naam: state.monteur?.naam || null,
+  };
+
+  // Verwijder eventuele eerdere telling voor dit artikel vandaag
+  state.tellingen = state.tellingen.filter(
+    t => !(t.datum === state.vandaag && t.artikelcode === art.code)
+  );
+  state.tellingen.push(record);
+  slaTellingenOp();
+
+  // Update dagSelectie
+  const idx = state.dagSelectie.findIndex(a => a.code === art.code);
+  if (idx !== -1) {
+    state.dagSelectie[idx] = {
+      ...state.dagSelectie[idx],
+      geteld:        true,
+      geteld_qty,
+      verschil,
+      toelichting,
+      opgeslagen_om: now,
+    };
+  }
+
+  state.openKaart = null;
+  renderVandaag();
+  renderGeschiedenis();
+  updateSub();
+
+  if (verschil !== 0) {
+    toast(`Opgeslagen met verschil ${verschil > 0 ? '+' : ''}${verschil} — toelichting geregistreerd`);
+  } else {
+    toast(`✓ ${art.code} akkoord geteld`);
+  }
+
+  // Productie: await sb.from('cycle_count_tellingen').insert(record);
+  console.log('[CC] Telling opgeslagen:', record);
+}
+
+// ── VERSCHIL MODAL ──
+function openVerschilModal(art, geteld_qty, verschil, opmerking) {
+  document.getElementById('verschil-modal-sub').textContent =
+    `${art.code} — ${art.naam}`;
+  document.getElementById('verschil-modal-tekst').textContent =
+    `Systeemvoorraad: ${art.sys_voorraad}  →  Geteld: ${geteld_qty}  →  Verschil: ${verschil > 0 ? '+' : ''}${verschil}`;
+  const toelEl = document.getElementById('verschil-toelichting');
+  toelEl.value = opmerking || '';
+  document.getElementById('verschil-hint').style.display = 'none';
+  toelEl.classList.remove('fout');
+  document.getElementById('modal-verschil').classList.add('open');
+
+  _verschilCb = (toelichting) => {
+    registreerTelling(art, geteld_qty, verschil, toelichting);
+  };
+
+  setTimeout(() => toelEl.focus(), 100);
+}
+
+function sluitVerschilModal() {
+  document.getElementById('modal-verschil').classList.remove('open');
+  _verschilCb = null;
+}
+
+function validateToelichting() {
+  const val = document.getElementById('verschil-toelichting').value.trim();
+  const hint = document.getElementById('verschil-hint');
+  const el   = document.getElementById('verschil-toelichting');
+  if (val.length > 0) {
+    el.classList.remove('fout');
+    hint.style.display = 'none';
+  }
+}
+
+function bevestigVerschil() {
+  const toelichting = document.getElementById('verschil-toelichting').value.trim();
+  const hint  = document.getElementById('verschil-hint');
+  const toelEl = document.getElementById('verschil-toelichting');
+
+  if (!toelichting) {
+    toelEl.classList.add('fout');
+    hint.style.display = '';
+    toelEl.focus();
+    return;
+  }
+
+  const cb = _verschilCb;
+  sluitVerschilModal();
+  if (cb) cb(toelichting);
+}
+
+document.getElementById('modal-verschil').addEventListener('click', function(e) {
+  if (e.target === this) sluitVerschilModal();
+});
+
+// ── RENDER GESCHIEDENIS ──
+function renderGeschiedenis() {
+  const lijst = document.getElementById('geschiedenis-lijst');
+
+  // Groepeer per dag, nieuwste eerst
+  const dagMap = {};
+  state.tellingen.forEach(t => {
+    if (!dagMap[t.datum]) dagMap[t.datum] = [];
+    dagMap[t.datum].push(t);
+  });
+
+  const dagen = Object.keys(dagMap).sort((a, b) => b.localeCompare(a));
+
+  if (!dagen.length) {
+    lijst.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📅</div>
+        <span>Nog geen tellingen geregistreerd</span>
+      </div>`;
+    return;
+  }
+
+  lijst.innerHTML = dagen.map(datum => dagBlokHTML(datum, dagMap[datum])).join('');
+}
+
+function dagBlokHTML(datum, tellingen) {
+  const dagId   = 'dag-' + datum;
+  const isVandaag = datum === state.vandaag;
+  const datumObj = new Date(datum + 'T12:00:00');
+  const datumStr = datumObj.toLocaleDateString('nl-NL', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  const akkoord  = tellingen.filter(t => t.verschil === 0).length;
+  const verschil = tellingen.filter(t => t.verschil !== 0).length;
+  const statsStr = `${tellingen.length} geteld · ${akkoord} akkoord${verschil ? ` · ${verschil} verschil` : ''}`;
+
+  const rijen = tellingen
+    .sort((a, b) => (a.opgeslagen_om || '').localeCompare(b.opgeslagen_om || ''))
+    .map(t => {
+      const heeftVerschil = t.verschil !== 0;
+      const diffTekst = heeftVerschil
+        ? `<span style="color:var(--danger)">${t.verschil > 0 ? '+' : ''}${t.verschil}</span>`
+        : `<span style="color:var(--ok)">Akkoord</span>`;
+      return `<div class="hist-rij${heeftVerschil ? ' met-verschil' : ''}">
+        <div class="hist-info">
+          <span class="hist-code">${esc(t.artikelcode)}</span>
+          <span class="hist-naam">${esc(t.artikelnaam)}</span>
+          <span class="hist-telling">Sys: ${t.sys_voorraad} → Geteld: ${t.geteld_qty} → ${diffTekst}</span>
+          ${t.toelichting ? `<span class="hist-toelichting">"${esc(t.toelichting)}"</span>` : ''}
+        </div>
+        <div class="hist-right">
+          <span class="badge ${heeftVerschil ? 'badge-af' : 'badge-ok'}">${heeftVerschil ? 'Verschil' : 'OK'}</span>
+          <span class="hist-tijd">${(t.opgeslagen_om||'').slice(11,16)}</span>
+          ${t.monteur_naam ? `<span class="hist-tijd">${esc(t.monteur_naam.split(' ')[0])}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+  return `<div class="dag-blok">
+    <div class="dag-header" onclick="toggleDag('${dagId}')">
+      <div>
+        <div class="dag-datum">${isVandaag ? 'Vandaag — ' : ''}${datumStr}</div>
+        <div class="dag-stats">${statsStr}</div>
+      </div>
+      <span style="font-size:12px;color:var(--muted)" id="chev-${dagId}">▸</span>
+    </div>
+    <div class="dag-body${isVandaag ? ' open' : ''}" id="${dagId}">
+      ${rijen || '<div style="padding:8px 12px;font-size:12px;color:var(--muted)">Geen tellingen</div>'}
+    </div>
+  </div>`;
+}
+
+function toggleDag(dagId) {
+  const body = document.getElementById(dagId);
+  const chev = document.getElementById('chev-' + dagId);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (chev) chev.style.transform = open ? 'rotate(90deg)' : '';
+}
+</script>
+</body>
+</html>

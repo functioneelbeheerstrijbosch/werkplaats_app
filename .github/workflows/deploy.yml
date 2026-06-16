@@ -1,0 +1,26 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy source files
+        shell: powershell
+        run: |
+          $source = "${{ github.workspace }}"
+          $destination = "${{ secrets.IIS_PATH }}"
+
+          robocopy $source $destination /MIR /XD ".git"
+
+          if ($LASTEXITCODE -gt 7) {
+              exit $LASTEXITCODE
+          }

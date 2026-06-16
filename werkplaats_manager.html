@@ -1,0 +1,3294 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werkplaats Manager — Strijbosch</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg:     #f0f4f8;
+    --bg2:    #ffffff;
+    --bg3:    #e4ecf4;
+    --border: #c8d8e8;
+    --text:   #001e3c;
+    --muted:  #5a7a9a;
+    --accent: #ec6500;
+    --danger: #d93025;
+    --ok:     #1a8f4f;
+    --info:   #004582;
+    --font:   ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:   ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    --r:      6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+  /* ── LOGIN ── */
+  #login-screen {
+    position: fixed; inset: 0; z-index: 100;
+    background: #004582;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0; padding: 0; overflow: hidden;
+  }
+  #login-screen.hidden { display: none; }
+  .login-illustratie {
+    position: absolute; inset: 0;
+    background-image: url('https://cms.strijbosch.nl/wp-content/uploads/illustration.png');
+    background-size: cover; background-position: center;
+    opacity: 0.06; pointer-events: none;
+  }
+  .login-kaart {
+    position: relative; z-index: 1;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    padding: 36px 28px 28px;
+    width: 100%; max-width: 340px;
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+    margin: 24px;
+  }
+  .login-logo-img { height: 44px; width: auto; }
+  .login-divider { width: 100%; height: 1px; background: #c8d8e8; margin: -4px 0; }
+  .login-title { font-size: 16px; font-weight: 600; text-align: center; color: #001e3c; }
+  .login-sub   { font-size: 13px; color: #5a7a9a; text-align: center; margin-top: -12px; }
+  .login-form  { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .login-input {
+    background: #f0f4f8; border: 1px solid #c8d8e8;
+    border-radius: var(--r); color: #001e3c;
+    font-family: var(--font); font-size: 15px; padding: 13px 14px; width: 100%;
+  }
+  .login-input::placeholder { color: #5a7a9a; }
+  .login-input:focus { outline: none; border-color: #ec6500; }
+  .login-btn {
+    background: #ec6500; color: #fff; border: none;
+    border-radius: var(--r); font-family: var(--font);
+    font-size: 15px; font-weight: 600; padding: 13px; cursor: pointer; width: 100%;
+  }
+  .login-fout { font-size: 13px; color: var(--danger); text-align: center; min-height: 18px; }
+  .login-footer {
+    position: relative; z-index: 1;
+    font-size: 11px; color: rgba(255,255,255,0.4);
+    font-family: var(--mono); letter-spacing: 0.08em; margin-top: 16px;
+  }
+
+  /* ── APP ── */
+  #app { display: none; height: 100vh; flex-direction: column; overflow: hidden; }
+  #app.visible { display: flex; }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 12px 20px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 2px; }
+  .header-title { font-size: 15px; font-weight: 600; }
+  .header-sub   { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .header-tab {
+    font-size: 13px; font-weight: 500; padding: 6px 14px;
+    border-radius: var(--r); cursor: pointer;
+    border: 1px solid var(--border); color: var(--muted);
+    background: transparent; font-family: var(--font);
+    transition: all .15s;
+  }
+  .header-tab.active { background: var(--bg3); color: var(--text); border-color: var(--accent); }
+  .uitlog-btn {
+    font-size: 12px; color: var(--muted); background: none;
+    border: 1px solid var(--border); border-radius: var(--r);
+    padding: 6px 12px; cursor: pointer; font-family: var(--font);
+  }
+
+  /* ── TABS ── */
+  .tab-content { display: none; flex: 1; min-height: 0; overflow: hidden; }
+  .tab-content.active { display: flex; }
+
+  /* ── VERDEEL BOARD ── */
+  #tab-verdeel {
+    flex-direction: row;
+    overflow: hidden;
+  }
+
+  /* Onverdeeld kolom */
+  .onverdeeld-kolom {
+    width: 320px; min-width: 260px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .kolom-header {
+    padding: 12px 14px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .kolom-titel { font-size: 13px; font-weight: 600; font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .kolom-count {
+    font-size: 11px; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 2px 8px; color: var(--muted); font-family: var(--mono);
+  }
+  .kolom-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+  .verdeel-rechts {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ond-best-zone {
+    padding: 9px 16px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; font-family: var(--mono);
+    color: var(--muted); cursor: default; user-select: none;
+    transition: background .15s, color .15s;
+  }
+  .ond-best-zone.drag-over {
+    background: rgba(245,166,35,.12);
+    outline: 2px dashed #f5a623;
+    outline-offset: -3px;
+    color: #f5a623;
+  }
+
+  /* Monteur kolommen */
+  .monteurs-board {
+    flex: 1; overflow-x: auto; overflow-y: hidden;
+    display: flex; flex-direction: row; gap: 0;
+  }
+  .monteur-kolom {
+    min-width: 260px; width: 280px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+  }
+  .monteur-kolom-header {
+    padding: 10px 14px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .monteur-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; font-family: var(--mono); flex-shrink: 0;
+  }
+  .monteur-info { flex: 1; min-width: 0; }
+  .monteur-naam { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .monteur-sub  { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .monteur-body {
+    flex: 1; overflow-y: auto; padding: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+    min-height: 100px;
+  }
+  .monteur-body.drag-over {
+    background: rgba(230,101,25,.08);
+    outline: 2px dashed var(--accent);
+    outline-offset: -4px;
+    border-radius: var(--r);
+  }
+
+  /* ── OPDRACHT KAART ── */
+  .opdracht-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 12px;
+    cursor: grab; user-select: none; flex-shrink: 0;
+    transition: box-shadow .15s, opacity .15s;
+  }
+  .opdracht-kaart:active { cursor: grabbing; }
+  .opdracht-kaart.dragging { opacity: .4; }
+  .opdracht-kaart.drag-over-card { border-color: var(--accent); }
+  .kaart-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .kaart-nr { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  .kaart-prio {
+    font-size: 10px; font-family: var(--mono); text-transform: uppercase;
+    padding: 2px 7px; border-radius: 4px; font-weight: 500;
+  }
+  .prio-spoed   { background: rgba(232,76,58,.15);  color: var(--danger); border: 1px solid rgba(232,76,58,.3); }
+  .prio-hoog    { background: rgba(230,101,25,.15); color: var(--accent); border: 1px solid rgba(230,101,25,.3); }
+  .prio-normaal { background: rgba(77,166,255,.1);  color: var(--info);   border: 1px solid rgba(77,166,255,.25); }
+  .prio-laag    { background: rgba(122,144,176,.1); color: var(--muted);  border: 1px solid rgba(122,144,176,.25); }
+  .kaart-klacht { font-size: 13px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kaart-meta   { font-size: 11px; color: var(--muted); }
+  .kaart-datum  { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+
+  /* Lege staat */
+  .drop-leeg {
+    text-align: center; color: var(--muted); font-size: 12px;
+    padding: 24px 12px; border: 1px dashed var(--border);
+    border-radius: var(--r); margin: 4px;
+  }
+
+  /* ── FILTERS ── */
+  .filters-bar {
+    padding: 10px 14px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; align-items: center;
+  }
+  .filter-select {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 5px 10px;
+    cursor: pointer;
+  }
+  .filter-zoek {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 5px 10px;
+    min-width: 140px;
+  }
+  .filter-zoek:focus { outline: none; border-color: var(--accent); }
+  /* ── Multi-select filter ── */
+  .ms-wrap { position: relative; flex-shrink: 0; }
+  .ms-btn {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 5px 10px;
+    cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 5px;
+  }
+  .ms-btn::after { content: '▾'; font-size: 10px; color: var(--muted); }
+  .ms-btn.actief { border-color: var(--accent); color: var(--accent); }
+  .ms-btn.actief::after { color: var(--accent); }
+  .ms-panel {
+    display: none; position: fixed;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--r); min-width: 180px; max-height: 260px;
+    overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    z-index: 9999; padding: 4px 0;
+  }
+  .ms-panel.open { display: block; }
+  .ms-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; font-size: 13px; cursor: pointer;
+    color: var(--text);
+  }
+  .ms-item:hover { background: var(--bg3); }
+  .ms-item input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
+  .filter-reset {
+    background: none; border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--muted); font-size: 12px; padding: 5px 10px; cursor: pointer;
+    font-family: var(--font);
+  }
+  .filter-reset:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-reset.actief { border-color: var(--accent); color: var(--accent); }
+
+  /* ── VOORRAAD TAB ── */
+  #tab-voorraad {
+    flex-direction: column; overflow: hidden;
+  }
+  .voorraad-content {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px; align-content: start;
+  }
+  .voorraad-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 14px 16px;
+  }
+  .voorraad-kaart-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .voorraad-naam { font-size: 14px; font-weight: 600; }
+  .voorraad-artnr { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .voorraad-badge {
+    font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 4px;
+  }
+  .badge-laag  { background: rgba(232,76,58,.15); color: var(--danger); border: 1px solid rgba(232,76,58,.3); }
+  .badge-ok    { background: rgba(57,201,110,.1); color: var(--ok);     border: 1px solid rgba(57,201,110,.25); }
+  .voorraad-monteur-rij {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  }
+  .voorraad-monteur-label { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .voorraad-select {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text);
+    font-family: var(--font); font-size: 13px; padding: 7px 10px;
+  }
+  .voorraad-btn {
+    font-size: 12px; font-weight: 600; padding: 7px 14px;
+    background: #004582; color: #fff; border: none;
+    border-radius: var(--r); cursor: pointer; font-family: var(--font);
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .voorraad-btn:disabled { opacity: .5; cursor: default; }
+  .voorraad-taak-lijst { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .voorraad-taak {
+    font-size: 12px; padding: 6px 10px; background: var(--bg3);
+    border-radius: var(--r); display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--border);
+  }
+  .taak-monteur { color: var(--info); font-weight: 500; }
+  .taak-verwijder {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 14px; padding: 0 4px;
+  }
+  .taak-verwijder:hover { color: var(--danger); }
+
+  /* ── AFGEROND TAB ── */
+  #tab-afgerond {
+    flex-direction: column; overflow: hidden;
+  }
+  .afgerond-datumbar {
+    flex-shrink: 0;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg); flex-wrap: wrap;
+  }
+  .afgerond-content {
+    flex: 1; min-height: 0;
+    overflow-y: auto;
+    padding: 14px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .afgerond-kaart {
+    flex-shrink: 0;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden;
+  }
+  .afgerond-header {
+    padding: 10px 14px; background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .afgerond-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; font-family: var(--mono); flex-shrink: 0;
+  }
+  .afgerond-naam { font-size: 13px; font-weight: 600; flex: 1; }
+  .afgerond-count {
+    font-size: 11px; font-family: var(--mono);
+    background: rgba(57,201,110,.1); color: var(--ok);
+    border: 1px solid rgba(57,201,110,.25);
+    border-radius: 10px; padding: 2px 9px;
+  }
+  .afgerond-lijst { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .afgerond-rij {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden;
+  }
+  .afgerond-rij-header {
+    padding: 8px 10px; display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 6px;
+  }
+  .afgerond-rij-info { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .afgerond-rij-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .afgerond-nr { font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--text); }
+  .afgerond-meta { font-size: 11px; color: var(--muted); }
+  .afgerond-badges { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .afgerond-badge {
+    font-size: 10px; font-family: var(--mono); padding: 1px 7px;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--muted); white-space: nowrap;
+  }
+  .afgerond-badge.code  { background: rgba(77,166,255,.08); border-color: rgba(77,166,255,.2); color: var(--info); }
+  .afgerond-badge.org   { background: rgba(230,101,25,.08); border-color: rgba(230,101,25,.2); color: #e66519; }
+  .afgerond-artikelen { padding: 0 10px 8px; display: flex; flex-direction: column; gap: 3px; }
+  .afgerond-artikel-rij {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px; border-left: 2px solid var(--ok);
+    background: rgba(26,143,79,.04); border-radius: 0 4px 4px 0;
+  }
+  .afgerond-artikel-code { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); }
+  .afgerond-artikel-type { font-size: 11px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .afgerond-artikel-aantal { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted); flex-shrink: 0; }
+  .afgerond-notitie { padding: 6px 10px 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+  .afgerond-notitie-blok { font-size: 12px; line-height: 1.5; color: var(--text); }
+  .afgerond-notitie-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 1px; }
+  .afgerond-extra-sectie { padding: 6px 10px 8px; border-top: 1px solid var(--border); background: var(--bg3); }
+  .afgerond-extra-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .afgerond-rij-iconen { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .afgerond-leeg { padding: 20px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  /* ── AFGEROND PER OPDRACHT ── */
+  .af-opdracht-kaart {
+    flex-shrink: 0;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden;
+  }
+  .af-opdracht-header {
+    padding: 10px 14px; background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+  }
+  .af-opdracht-nrblok { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+  .af-opdracht-nr { font-family: var(--mono); font-weight: 700; font-size: 14px; color: var(--text); }
+  .af-volledig-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; font-family: var(--mono);
+    background: rgba(26,143,79,.1); color: var(--ok);
+    border: 1px solid rgba(26,143,79,.25);
+    border-radius: 10px; padding: 2px 8px; white-space: nowrap;
+  }
+  .af-gedeeltelijk-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; font-family: var(--mono);
+    background: rgba(230,101,25,.1); color: #e66519;
+    border: 1px solid rgba(230,101,25,.25);
+    border-radius: 10px; padding: 2px 8px; white-space: nowrap;
+  }
+  .af-monteur-rij {
+    padding: 8px 10px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    background: var(--bg);
+  }
+  .af-monteur-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 20px;
+    background: var(--bg2); border: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .af-monteur-avatar {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 600; font-family: var(--mono); flex-shrink: 0;
+  }
+  .af-regel-lijst { display: flex; flex-direction: column; }
+  .af-regel-rij {
+    padding: 8px 12px; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .af-regel-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  }
+  .af-regel-ident { display: flex; align-items: baseline; gap: 5px; flex: 1; min-width: 0; }
+  .af-regel-code  { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .af-regel-type  { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .af-monteur-inline {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--muted); flex-shrink: 0; white-space: nowrap;
+  }
+  .af-notitie-wrapper { display: flex; flex-direction: column; gap: 3px; }
+  .af-notitie-blok {
+    font-size: 12px; line-height: 1.5; color: var(--text);
+    background: var(--bg3); border-radius: 4px; padding: 5px 8px;
+    border-left: 2px solid var(--border);
+  }
+  .af-notitie-label {
+    font-size: 10px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 1px;
+  }
+  .af-geen-notitie { font-size: 11px; color: var(--muted); font-style: italic; }
+  .af-samenvatting {
+    padding: 10px 14px; border-top: 1px solid var(--border);
+    font-size: 12px; line-height: 1.7; color: var(--text);
+    white-space: pre-line; cursor: text; user-select: text;
+  }
+
+  /* ── OPDRACHTEN TAB STATUS FILTERS ── */
+  .sf-balk {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    padding: 8px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px; width: 100%;
+  }
+  .sf-btn {
+    font-family: var(--font); font-size: 12px; padding: 4px 13px;
+    border-radius: 14px; border: 1px solid var(--border);
+    background: var(--bg2); color: var(--muted); cursor: pointer; transition: all .15s;
+    white-space: nowrap;
+  }
+  .sf-btn.actief                  { font-weight: 600; background: var(--bg3); color: var(--text); border-color: var(--text); }
+  .sf-btn.actief[data-f="open"]   { background: rgba(217,48,37,.1); color: var(--danger); border-color: rgba(217,48,37,.4); }
+  .sf-btn.actief[data-f="geclaimd"]{ background: rgba(236,101,0,.1);  color: var(--accent); border-color: rgba(236,101,0,.4); }
+  .sf-btn.actief[data-f="afgerond"]  { background: rgba(26,143,79,.1);  color: var(--ok);     border-color: rgba(26,143,79,.4); }
+  .sf-btn.actief[data-f="onderdelen"]{ background: rgba(37,99,235,.1);  color: #2563eb;       border-color: rgba(37,99,235,.4); }
+  .oc-stat-ond { font-size:10px;font-family:var(--mono);background:rgba(37,99,235,.1);color:#2563eb;border:1px solid rgba(37,99,235,.3);border-radius:10px;padding:1px 6px; }
+  .sf-label {
+    font-size: 10px; font-family: var(--mono); font-weight: 600;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 7px; margin-left: 2px;
+  }
+  .opdracht-sectie { margin-bottom: 20px; }
+  .opdracht-sectie-header {
+    display: flex; align-items: center; gap: 9px;
+    margin-bottom: 8px; padding: 0 2px;
+  }
+  .oc-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .oc-titel { font-size: 13px; font-weight: 600; color: var(--text); }
+  .oc-tel {
+    font-family: var(--mono); font-size: 11px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 8px;
+  }
+  .oc-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden; margin-bottom: 8px; flex-shrink: 0;
+  }
+  .oc-kaart-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: var(--bg3);
+    cursor: pointer; user-select: none;
+  }
+  .oc-kaart-header:hover { background: var(--border); }
+  .oc-kaart-body { display: none; }
+  .oc-regel-rij {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 7px 14px; border-top: 1px solid var(--border); font-size: 12px;
+  }
+  .oc-stat-open    { font-size:10px;font-family:var(--mono);background:rgba(217,48,37,.1);color:var(--danger);border:1px solid rgba(217,48,37,.3);border-radius:10px;padding:1px 6px; }
+  .oc-stat-claim   { font-size:10px;font-family:var(--mono);background:rgba(236,101,0,.1);color:var(--accent);border:1px solid rgba(236,101,0,.3);border-radius:10px;padding:1px 6px; }
+  .oc-stat-afgerond{ font-size:10px;font-family:var(--mono);background:rgba(26,143,79,.1);color:var(--ok);border:1px solid rgba(26,143,79,.3);border-radius:10px;padding:1px 6px; }
+
+  /* ── GROEP KAART ── */
+  .groep-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden; margin-bottom: 6px;
+    cursor: grab; user-select: none; flex-shrink: 0;
+  }
+  .groep-kaart:active { cursor: grabbing; }
+  .groep-kaart.dragging { opacity: .4; }
+  .groep-kaart.gedeeltelijk { border-color: rgba(230,101,25,.5); background: rgba(230,101,25,.03); }
+  .groep-header {
+    padding: 10px 12px; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px;
+  }
+  .groep-header-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  .groep-chevron { font-size: 11px; color: var(--muted); flex-shrink: 0; transition: transform .2s; cursor: pointer; }
+  .groep-chevron.open { transform: rotate(90deg); }
+  .groep-icon-btn {
+    background: none; border: 1px solid transparent; border-radius: 5px;
+    cursor: pointer; font-size: 14px; line-height: 1; padding: 3px 5px;
+    color: var(--muted); flex-shrink: 0; transition: background .15s, border-color .15s;
+  }
+  .groep-icon-btn:hover { background: var(--bg3); border-color: var(--border); }
+  .groep-icon-btn.actief { background: rgba(77,166,255,.1); border-color: rgba(77,166,255,.3); color: var(--info); }
+  .groep-extra-sectie {
+    border-top: 1px solid var(--border); padding: 8px 12px;
+    background: var(--bg3); font-size: 12px; color: var(--text); line-height: 1.5;
+  }
+  .groep-extra-label {
+    font-size: 10px; color: var(--muted); font-family: var(--mono);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .badge-gedeeltelijk-mgr {
+    font-size: 10px; font-family: var(--mono); font-weight: 600;
+    padding: 2px 6px; border-radius: 3px;
+    background: rgba(230,101,25,.15); color: var(--accent);
+    border: 1px solid rgba(230,101,25,.3);
+  }
+  .badge-regels-mgr {
+    font-size: 10px; font-family: var(--mono);
+    padding: 2px 6px; border-radius: 3px;
+    background: rgba(77,166,255,.08); color: var(--info);
+    border: 1px solid rgba(77,166,255,.2);
+  }
+  .groep-regels {
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .mgr-regel-rij {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    gap: 8px; cursor: grab;
+  }
+  .mgr-regel-rij:last-child { border-bottom: none; }
+  .mgr-regel-rij:active { cursor: grabbing; }
+  .mgr-regel-rij.bezet { opacity: .5; cursor: default; }
+  .mgr-regel-rij.eigen { border-left: 2px solid var(--ok); }
+  .mgr-regel-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mgr-regel-nr { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .mgr-regel-handeling { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mgr-regel-meta { font-size: 11px; color: var(--muted); }
+  .mgr-regel-bezet { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+  .mgr-veld-rij { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .mgr-veld {
+    font-size: 11px; font-family: var(--mono); color: var(--text);
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .mgr-veld-label { color: var(--muted); font-size: 10px; }
+  .mgr-opdrachtcode {
+    font-size: 11px; font-family: var(--mono); color: var(--info);
+    background: rgba(77,166,255,.08); border: 1px solid rgba(77,166,255,.2);
+    border-radius: 3px; padding: 1px 6px;
+  }
+
+  /* ── GEBRUIKER MENU ── */
+  .monteur-menu-btn {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 16px; padding: 2px 6px; border-radius: var(--r); line-height: 1;
+    flex-shrink: 0;
+  }
+  .monteur-menu-btn:hover { background: var(--bg3); color: var(--text); }
+  .gebruiker-toevoegen-kolom {
+    min-width: 60px; width: 60px; flex-shrink: 0;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 12px; border-right: 1px solid var(--border);
+  }
+  .gb-plus-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg2); border: 1px dashed var(--border);
+    color: var(--muted); font-size: 22px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s, color .15s;
+  }
+  .gb-plus-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .gb-verborgen-panel {
+    position: absolute; top: 40px; right: 0; z-index: 50;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    min-width: 180px; overflow: hidden; display: none;
+  }
+  .gb-verborgen-panel.open { display: block; }
+  .gb-verborgen-item {
+    padding: 10px 14px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .gb-verborgen-item:last-child { border-bottom: none; }
+  .gb-verborgen-item:hover { background: var(--bg3); }
+
+  /* ── ONDERDELEN ── */
+  .mgr-ond-kaart {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-left: 4px solid #f5a623;
+    border-radius: var(--r); margin-bottom: 8px; padding: 10px 12px;
+  }
+  .mgr-ond-kaart.kleur-rood   { border-left-color: #e85d3a; }
+  .mgr-ond-kaart.kleur-groen  { border-left-color: #2ab66d; }
+  .mgr-ond-kaart.kleur-oranje { border-left-color: #f5a623; }
+  .mgr-ond-kleur-knop {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid transparent; cursor: pointer; display: inline-block;
+  }
+  .mgr-ond-kleur-knop[data-kleur="oranje"] { background: #f5a623; }
+  .mgr-ond-kleur-knop[data-kleur="rood"]   { background: #e85d3a; }
+  .mgr-ond-kleur-knop[data-kleur="groen"]  { background: #2ab66d; }
+  .mgr-ond-kleur-knop.actief { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+  .mgr-odb-rij {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid var(--border); gap: 10px;
+  }
+  .mgr-odb-toggle {
+    width: 36px; height: 20px; border-radius: 10px; border: none; cursor: pointer;
+    background: var(--bg3); position: relative; transition: background .2s; flex-shrink: 0;
+  }
+  .mgr-odb-toggle.aan { background: var(--ok); }
+  .mgr-odb-toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: transform .2s;
+  }
+  .mgr-odb-toggle.aan::after { transform: translateX(16px); }
+
+  /* ── DASHBOARD ── */
+  .dash-topbar {
+    padding: 14px 20px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 20px; flex-shrink: 0; flex-wrap: wrap;
+  }
+  .dash-datum-label {
+    font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--text);
+    white-space: nowrap; width: 260px; flex-shrink: 0;
+  }
+  .dash-slider-wrap {
+    display: flex; align-items: center; gap: 8px; flex: 1;
+  }
+  #dash-slider {
+    flex: 1; max-width: 400px; accent-color: var(--accent); cursor: pointer;
+  }
+  .dash-dag-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--r); padding: 5px 10px; font-size: 12px; cursor: pointer;
+    font-family: var(--font);
+  }
+  .dash-dag-btn:hover { border-color: var(--accent); }
+  .dash-filter-input {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--r); padding: 5px 10px; font-size: 13px; font-family: var(--font);
+    width: 200px;
+  }
+  .dash-filter-input:focus { outline: none; border-color: var(--accent); }
+  .dash-grid {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  /* Sectie kaarten */
+  .dash-sectie-kaart {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; flex-shrink: 0;
+  }
+  .dash-sectie-header {
+    padding: 11px 16px; background: var(--bg3); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .dash-sectie-titel { font-size: 13px; font-weight: 600; }
+  .dash-sectie-sub { font-size: 12px; color: var(--muted); margin-left: auto; font-family: var(--mono); }
+  /* Opdrachtcode tabel */
+  .dash-code-tabel { width: 100%; border-collapse: collapse; }
+  .dash-code-tabel th {
+    text-align: left; font-size: 11px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; padding: 7px 16px;
+    border-bottom: 2px solid var(--border); white-space: nowrap; background: var(--bg3);
+  }
+  .dash-code-tabel th.r, .dash-code-tabel td.r { text-align: right; }
+  .dash-code-tabel td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .dash-code-tabel tbody tr:last-child td { border-bottom: none; }
+  .dash-code-tabel tbody tr:hover td { background: var(--bg3); }
+  .dnum { font-family: var(--mono); font-weight: 600; }
+  .dnum-ok   { color: var(--ok); }
+  .dnum-warn { color: var(--accent); }
+  .dnum-dim  { color: var(--muted); font-weight: 400; }
+  .dash-bar { width: 80px; height: 6px; background: var(--bg3); border-radius: 3px; display: inline-block; vertical-align: middle; overflow: hidden; border: 1px solid var(--border); }
+  .dash-bar-fill { height: 100%; background: var(--ok); border-radius: 3px; }
+  /* Grafiek */
+  .dash-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .dash-legenda-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .dash-legenda-kleur { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .dash-grafiek-scroll { overflow-x: auto; padding: 12px 16px 16px; }
+  /* Monteur mini-grid */
+  .dash-monteur-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1px; background: var(--border);
+  }
+  .dash-mont-cel { background: var(--bg2); padding: 12px 14px; }
+  .dash-mont-naam { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dash-mont-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-top: 8px; text-align: center; }
+  .dash-mont-getal { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+  .dash-mont-label { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  /* ── FUNCTIEBEHEER ── */
+  #tab-functies { flex-direction: column; overflow: hidden; }
+  .fb-scroll { flex: 1; overflow-y: auto; padding: 20px; }
+  .fb-tabel { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--bg2); border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); }
+  .fb-tabel th {
+    padding: 9px 14px; text-align: left;
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+    background: var(--bg3); border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .fb-tabel td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .fb-tabel tr:last-child td { border-bottom: none; }
+  .fb-tabel tr:hover td { background: var(--bg3); }
+  .fb-naam { font-size: 13px; font-weight: 600; }
+  .fb-kolom-header { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .fb-kolom-sub { font-size: 9px; font-family: var(--mono); color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; }
+  .fb-toggle {
+    display: block; width: 36px; height: 20px; border-radius: 10px;
+    border: none; cursor: pointer; position: relative;
+    transition: background .2s; flex-shrink: 0; margin: 0 auto;
+  }
+  .fb-toggle::after {
+    content: ''; position: absolute; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff; top: 3px; transition: left .2s;
+  }
+  .fb-toggle.aan  { background: var(--ok); }
+  .fb-toggle.aan::after  { left: 19px; }
+  .fb-toggle.uit  { background: var(--border); }
+  .fb-toggle.uit::after  { left: 3px; }
+  .fb-toggle:disabled { opacity: .45; cursor: not-allowed; }
+  .fb-laden { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 18px;
+    font-size: 13px; z-index: 999; opacity: 0;
+    transition: opacity .2s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-illustratie"></div>
+  <div class="login-kaart">
+    <img class="login-logo-img"
+      src="https://cms.strijbosch.nl/wp-content/uploads/strijbosch-logo.svg"
+      alt="Strijbosch"
+      onerror="this.style.display='none'">
+    <div class="login-divider"></div>
+    <div class="login-title">Planningsbeheer</div>
+    <div class="login-sub">Alleen toegankelijk voor beheerders</div>
+    <div class="login-form">
+      <input class="login-input" id="login-email" type="email" placeholder="E-mailadres" autocomplete="email"
+        onkeydown="if(event.key==='Enter') signIn()">
+      <input class="login-input" id="login-ww" type="password" placeholder="Wachtwoord" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') signIn()">
+      <button class="login-btn" id="login-btn" onclick="signIn()">Inloggen</button>
+      <div class="login-fout" id="login-fout"></div>
+    </div>
+  </div>
+  <div class="login-footer">Strijbosch B.V. — Manager</div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <img src="https://cms.strijbosch.nl/wp-content/uploads/strijbosch-logo.svg"
+           alt="Strijbosch" style="height:28px;width:auto;"
+           onerror="this.outerHTML='<span style=\'font-size:15px;font-weight:700;color:var(--info)\'>Strijbosch</span>'">
+      <div class="header-sub" id="header-sub">Planningsbeheer</div>
+    </div>
+    <div class="header-right">
+      <button class="header-tab active" id="tab-btn-verdeel" onclick="toonTab('verdeel')">Opdrachten verdelen</button>
+      <button class="header-tab" id="tab-btn-afgerond" onclick="toonTab('afgerond')">Opdrachten</button>
+      <button class="header-tab" id="tab-btn-onderdelen" onclick="toonTab('onderdelen')">Onderdelen besteld</button>
+      <button class="header-tab" id="tab-btn-dashboard" onclick="toonTab('dashboard')">Dashboard</button>
+      <button class="header-tab" id="tab-btn-tagnr" onclick="toonTab('tagnr')">Tagnummers</button>
+      <button class="header-tab" id="tab-btn-functies" onclick="toonTab('functies')">Functiebeheer</button>
+      <button class="uitlog-btn" onclick="laadData()" title="Vernieuwen" style="background:none;border-color:var(--border);color:var(--muted)">↻</button>
+      <button class="uitlog-btn" onclick="uitloggen()">Uitloggen</button>
+    </div>
+  </div>
+
+  <!-- VERDEEL TAB -->
+  <div class="tab-content active" id="tab-verdeel">
+    <div class="onverdeeld-kolom">
+      <div class="kolom-header">
+        <span class="kolom-titel">Onverdeeld</span>
+        <span class="kolom-count" id="onverdeeld-count">0</span>
+      </div>
+      <div class="filters-bar">
+        <input type="text" class="filter-zoek" id="filter-zoek" placeholder="Opdrachtnr…" oninput="renderBoard()">
+        <div class="ms-wrap" id="ms-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-opdrachtcode"></div></div>
+        <div class="ms-wrap" id="ms-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-opdrachtstatus"></div></div>
+        <div class="ms-wrap" id="ms-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-landcode"></div></div>
+        <div class="ms-wrap" id="ms-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-handeling"></div></div>
+        <div class="ms-wrap" id="ms-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-organisatie"></div></div>
+        <div class="ms-wrap" id="ms-werkplaats"><button class="ms-btn" data-label="Werkplaats" onclick="toggleMs('ms-werkplaats')">Werkplaats</button><div class="ms-panel" data-wrap="ms-werkplaats"></div></div>
+        <select class="filter-select" id="filter-deadline" onchange="renderBoard()">
+          <option value="">Alle deadlines</option>
+          <option value="verlopen">Verlopen</option>
+          <option value="vandaag">Vandaag</option>
+          <option value="3dagen">Binnen 3 dagen</option>
+          <option value="week">Binnen een week</option>
+        </select>
+        <button class="filter-reset" id="filter-reset-btn" onclick="resetBoardFilter()">Wis</button>
+      </div>
+      <div class="kolom-body" id="onverdeeld-body"
+        ondragover="onDragOver(event)" ondrop="onDrop(event, null)"
+        ondragleave="onDragLeave(event)">
+        <div class="drop-leeg">Geen onverdeelde opdrachten</div>
+      </div>
+    </div>
+    <div class="verdeel-rechts">
+      <div class="ond-best-zone" id="ond-best-zone"
+        ondragover="onDragOverBestel(event)" ondrop="onDropBestel(event)"
+        ondragleave="onDragLeave(event)">
+        📦 Onderdelen bestellen
+      </div>
+      <div class="monteurs-board" id="monteurs-board"></div>
+    </div>
+  </div>
+
+  <!-- VOORRAAD TAB -->
+  <div class="tab-content" id="tab-voorraad">
+    <div class="voorraad-content" id="voorraad-content">
+      <div style="color:var(--muted); font-size:13px;">Onderdelen laden...</div>
+    </div>
+  </div>
+
+  <!-- AFGEROND TAB -->
+  <div class="tab-content" id="tab-afgerond">
+    <div class="afgerond-datumbar" id="afgerond-datumbar">
+      <!-- Snelfilter status -->
+      <div class="sf-balk">
+        <button class="sf-btn actief" data-f="alle"       id="sf-alle"       onclick="setOpdrachtFilter('alle')">Alle</button>
+        <button class="sf-btn"        data-f="open"       id="sf-open"       onclick="setOpdrachtFilter('open')">● Openstaand</button>
+        <button class="sf-btn"        data-f="geclaimd"   id="sf-geclaimd"   onclick="setOpdrachtFilter('geclaimd')">● Geclaimd</button>
+        <button class="sf-btn"        data-f="onderdelen" id="sf-onderdelen" onclick="setOpdrachtFilter('onderdelen')">● Onderdelen besteld</button>
+        <button class="sf-btn"        data-f="afgerond"   id="sf-afgerond"   onclick="setOpdrachtFilter('afgerond')">● Afgerond</button>
+      </div>
+      <!-- Datum (alleen relevant voor afgerond-sectie) -->
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Afgerond van:</label>
+      <input type="date" id="afgerond-van"
+        style="font-size:13px;border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;background:var(--bg2);color:var(--text);cursor:pointer;font-family:var(--font)"
+        onchange="renderOpdrachten()">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">t/m:</label>
+      <input type="date" id="afgerond-tm"
+        style="font-size:13px;border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;background:var(--bg2);color:var(--text);cursor:pointer;font-family:var(--font)"
+        onchange="renderOpdrachten()">
+      <button onclick="resetAfgerondDatum()"
+        style="background:none;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:12px;padding:4px 10px;cursor:pointer;font-family:var(--font)">Vandaag</button>
+      <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px"></div>
+      <input type="text" class="filter-zoek" id="af-filter-zoek" placeholder="Opdrachtnr…" oninput="renderOpdrachten()" style="width:120px">
+      <div class="ms-wrap" id="af-ms-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('af-ms-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="af-ms-opdrachtcode"></div></div>
+      <div class="ms-wrap" id="af-ms-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('af-ms-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="af-ms-opdrachtstatus"></div></div>
+      <div class="ms-wrap" id="af-ms-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('af-ms-landcode')">Landcode</button><div class="ms-panel" data-wrap="af-ms-landcode"></div></div>
+      <div class="ms-wrap" id="af-ms-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('af-ms-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="af-ms-organisatie"></div></div>
+      <div class="ms-wrap" id="af-ms-monteur"><button class="ms-btn" data-label="Monteur" onclick="toggleMs('af-ms-monteur')">Monteur</button><div class="ms-panel" data-wrap="af-ms-monteur"></div></div>
+      <button onclick="resetAfgerondFilter()"
+        style="background:none;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:12px;padding:4px 10px;cursor:pointer;font-family:var(--font)">Wis</button>
+    </div>
+    <div class="afgerond-content" id="afgerond-content">
+      <div style="color:var(--muted); font-size:13px;">Laden...</div>
+    </div>
+  </div>
+
+  <!-- ONDERDELEN TAB -->
+  <div class="tab-content" id="tab-onderdelen" style="flex-direction:row;overflow:hidden;">
+    <!-- Linker kolom: opdrachten -->
+    <div style="flex:1;overflow-y:auto;padding:16px;min-width:0">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">Wacht op onderdelen</div>
+      <div id="mgr-ond-lijst"></div>
+    </div>
+    <!-- Rechter kolom: onderdelenbeheerders -->
+    <div style="width:260px;flex-shrink:0;border-left:1px solid var(--border);padding:16px;overflow-y:auto">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">Onderdelenbeheerders</div>
+      <div id="mgr-odb-lijst"></div>
+    </div>
+  </div>
+
+  <!-- TAGNR TAB -->
+  <div class="tab-content" id="tab-tagnr" style="flex-direction:column;overflow:hidden;">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex-shrink:0">
+      <input type="text" class="form-input" id="tagnr-filter-opdracht" placeholder="Opdrachtnr..." style="width:140px"
+        oninput="renderTagnrTab()">
+      <input type="text" class="form-input" id="tagnr-filter-artikel" placeholder="Artikelcode..." style="width:140px"
+        oninput="renderTagnrTab()">
+      <input type="text" class="form-input" id="tagnr-filter-tagnr" placeholder="Tagnummer..." style="width:140px"
+        oninput="renderTagnrTab()">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('tagnr-filter-opdracht').value='';document.getElementById('tagnr-filter-artikel').value='';document.getElementById('tagnr-filter-tagnr').value='';renderTagnrTab()">Wis filters</button>
+      <span id="tagnr-tab-tel" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="position:sticky;top:0;background:var(--bg2);z-index:1">
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Opdrachtnr</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Regelnr</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Artikelcode</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Tagnummer</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Monteur</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Datum</th>
+          </tr>
+        </thead>
+        <tbody id="tagnr-tabel-body"></tbody>
+      </table>
+      <div id="tagnr-tabel-leeg" style="display:none;padding:40px;text-align:center;color:var(--muted);font-size:13px">Geen resultaten</div>
+    </div>
+  </div>
+
+  <!-- FUNCTIEBEHEER TAB -->
+  <div class="tab-content" id="tab-functies">
+    <div class="fb-scroll">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Functies per monteur</div>
+      <div id="fb-inhoud" class="fb-laden">Laden…</div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <div class="tab-content" id="tab-dashboard" style="flex-direction:column;overflow:hidden;">
+    <div class="dash-topbar">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Van:</label>
+      <input type="date" id="dash-van"
+        style="font-size:13px;border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;background:var(--bg2);color:var(--text);cursor:pointer;font-family:var(--font)"
+        onchange="renderDashboard()">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">t/m:</label>
+      <input type="date" id="dash-tm"
+        style="font-size:13px;border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;background:var(--bg2);color:var(--text);cursor:pointer;font-family:var(--font)"
+        onchange="renderDashboard()">
+      <button onclick="resetDashDatum()"
+        style="background:none;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:12px;padding:4px 10px;cursor:pointer;font-family:var(--font)">Vandaag</button>
+      <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px"></div>
+      <div class="ms-wrap" id="dash-ms-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('dash-ms-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="dash-ms-opdrachtcode"></div></div>
+      <div class="ms-wrap" id="dash-ms-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('dash-ms-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="dash-ms-opdrachtstatus"></div></div>
+      <div class="ms-wrap" id="dash-ms-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('dash-ms-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="dash-ms-organisatie"></div></div>
+      <select id="dash-filter-monteur" class="dash-filter-input" onchange="renderDashboard()" style="width:160px">
+        <option value="">Alle monteurs</option>
+      </select>
+      <button onclick="resetDashFilter()" style="background:none;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;font-family:var(--font)">Wis</button>
+    </div>
+    <div class="dash-grid" id="dash-grid"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let alleReparaties  = [];
+let alleMonteurs    = [];
+let alleOnderdelen  = [];
+let alleLogs        = []; // reparatie_logs met actie='afgerond'
+let alleTagnrScans  = [];
+let voorraadTaken   = []; // { onderdeel_id, monteur_id, aangemaakt_op }
+let _opdrachtStatusFilter = 'alle';
+let huidigeMonteur  = null;
+let dragReparatieIds = []; // kan één of meerdere regel-ids zijn
+
+// ── AUTH ─────────────────────────────────────────────────────────
+
+async function signIn() {
+  const email = document.getElementById('login-email').value.trim();
+  const ww    = document.getElementById('login-ww').value;
+  const fout  = document.getElementById('login-fout');
+  const btn   = document.getElementById('login-btn');
+
+  fout.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Bezig...';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: ww });
+
+  if (error) {
+    fout.textContent = 'Inloggen mislukt. Controleer e-mail en wachtwoord.';
+    btn.disabled = false;
+    btn.textContent = 'Inloggen';
+    return;
+  }
+
+  await laadNaInlog(data.user);
+}
+
+async function laadNaInlog(user) {
+  // Controleer of gebruiker admin is
+  const { data: monteur, error } = await sb
+    .from('monteurs')
+    .select('*')
+    .eq('auth_user_id', user.id)
+    .single();
+
+  if (error || !monteur) {
+    document.getElementById('login-fout').textContent = 'Geen monteur-profiel gevonden.';
+    document.getElementById('login-btn').disabled = false;
+    document.getElementById('login-btn').textContent = 'Inloggen';
+    await sb.auth.signOut();
+    return;
+  }
+
+  if (!monteur.is_admin) {
+    document.getElementById('login-fout').textContent = 'Geen toegang — alleen beheerders.';
+    document.getElementById('login-btn').disabled = false;
+    document.getElementById('login-btn').textContent = 'Inloggen';
+    await sb.auth.signOut();
+    return;
+  }
+
+  huidigeMonteur = monteur;
+  document.getElementById('header-sub').textContent = `Ingelogd als ${monteur.naam}`;
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+
+  await Promise.all([laadData(), laadVoorraadTaken()]);
+  startRealtime();
+}
+
+async function uitloggen() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+// ── DATA ──────────────────────────────────────────────────────────
+
+async function laadData() {
+  const negentigDagenGeleden = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+  const [repRes, montRes, ondRes, logRes, tagnrRes] = await Promise.all([
+    sb.from('reparaties')
+      .select('id, opdrachtnr, opdrachtcode, betalercode, artikelcode, apparaat_type, aantal, doorsluizenjn, opdrachtstatus, status, handeling, werkplaats, landcode, organisatie, klacht, uiterste_datum_afdeling, aangemaakt_op, in_behandeling_op, afgerond_op, klant_naam, monteur_id, toegewezen_door, monteurs(naam, initialen)')
+      .order('aangemaakt_op', { ascending: false })
+      .limit(2000),
+    sb.from('monteurs').select('*').order('naam'),
+    sb.from('onderdelen').select('*').order('naam'),
+    sb.from('reparatie_logs')
+      .select('id, opdrachtnr, opdrachtcode, monteur_id, monteur_naam, aantal, aangemaakt_op')
+      .eq('actie', 'afgerond')
+      .gte('aangemaakt_op', negentigDagenGeleden)
+      .order('aangemaakt_op', { ascending: false }),
+    sb.from('tagnr_scans')
+      .select('id, reparatie_id, opdrachtnr, regelnummer, artikelcode, tagnr, monteur_id, aangemaakt_op')
+      .order('aangemaakt_op', { ascending: false })
+      .limit(5000),
+  ]);
+
+  alleReparaties  = repRes.data   || [];
+  alleMonteurs    = montRes.data  || [];
+  alleOnderdelen  = ondRes.data   || [];
+  alleLogs        = logRes.data   || [];
+  alleTagnrScans  = tagnrRes.data || [];
+
+  vulFilters();
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('dash-van').value = today;
+  document.getElementById('dash-tm').value  = today;
+  renderBoard();
+  renderVoorraad();
+  renderOpdrachten();
+  renderDashboard();
+}
+
+async function laadVoorraadTaken() {
+  const { data } = await sb
+    .from('voorraad_taken')
+    .select('*, monteurs(naam, initialen), onderdelen(naam, artikelnr)')
+    .order('aangemaakt_op', { ascending: false });
+  voorraadTaken = data || [];
+  renderVoorraad();
+}
+
+// ── REALTIME ──────────────────────────────────────────────────────
+
+let realtimeBlocked = false;  // voorkomt dat realtime de optimistische update overschrijft
+let realtimeTimer   = null;
+
+function startRealtime() {
+  sb.channel('manager-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'reparaties' }, (payload) => {
+      if (realtimeBlocked) return;
+      clearTimeout(realtimeTimer);
+      // Directe optimistische update voor status-wijzigingen vanuit de app
+      if (payload.new && payload.eventType === 'UPDATE') {
+        const rep = alleReparaties.find(r => r.id === payload.new.id);
+        if (rep) {
+          Object.assign(rep, payload.new);
+          // monteurs opnieuw koppelen
+          const m = alleMonteurs.find(m => m.id === payload.new.monteur_id);
+          rep.monteurs = m ? { naam: m.naam, initialen: m.initialen } : null;
+          renderBoard();
+          return;
+        }
+      }
+      realtimeTimer = setTimeout(() => laadData(), 500);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'voorraad_taken' }, () => laadVoorraadTaken())
+    .subscribe();
+}
+
+// ── FILTERS ──────────────────────────────────────────────────────
+
+// Portal-init: verplaats panels naar <body> zodat sticky-stacking ze niet blokkeert
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.ms-panel[data-wrap]').forEach(p => document.body.appendChild(p));
+});
+
+function getMsPanel(wrapId) {
+  return document.querySelector(`.ms-panel[data-wrap="${wrapId}"]`);
+}
+
+function toggleMs(wrapId) {
+  const wrap  = document.getElementById(wrapId);
+  if (!wrap) return;
+  const panel = getMsPanel(wrapId);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  document.querySelectorAll('.ms-panel.open').forEach(p => p.classList.remove('open'));
+  if (!isOpen) {
+    const rect = wrap.querySelector('.ms-btn').getBoundingClientRect();
+    panel.style.top  = (rect.bottom + 4) + 'px';
+    panel.style.left = rect.left + 'px';
+    panel.classList.add('open');
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ms-wrap') && !e.target.closest('.ms-panel')) {
+    document.querySelectorAll('.ms-panel.open').forEach(p => p.classList.remove('open'));
+  }
+});
+
+function maakMultiSelect(wrapId, opties, onFn) {
+  if (!onFn) onFn = 'renderBoard()';
+  const huidig = leesMultiSelect(wrapId);
+  const panel  = getMsPanel(wrapId);
+  if (!panel) return;
+  panel.innerHTML = opties.length
+    ? opties.map(o => {
+        return `<label class="ms-item"><input type="checkbox" value="${esc(o)}" ${huidig.has(o) ? 'checked' : ''} onchange="${onFn}"> ${esc(o)}</label>`;
+      }).join('')
+    : '<div style="padding:8px 12px;color:var(--muted);font-size:12px">Geen opties</div>';
+  updateMsBtn(wrapId);
+}
+
+function leesMultiSelect(wrapId) {
+  const panel = getMsPanel(wrapId);
+  if (!panel) return new Set();
+  return new Set([...panel.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value));
+}
+
+function updateMsBtn(wrapId) {
+  const wrap  = document.getElementById(wrapId);
+  const panel = getMsPanel(wrapId);
+  if (!wrap || !panel) return;
+  const count = panel.querySelectorAll('input[type=checkbox]:checked').length;
+  const btn   = wrap.querySelector('.ms-btn');
+  if (!btn) return;
+  const label = btn.dataset.label;
+  btn.textContent = count ? `${label} (${count})` : label;
+  btn.dataset.label = label;
+  btn.classList.toggle('actief', count > 0);
+}
+
+function vulFilters() {
+  const uniek = veld => [...new Set(alleReparaties.map(r => r[veld]).filter(Boolean))].sort();
+  maakMultiSelect('ms-opdrachtcode',  uniek('opdrachtcode'));
+  maakMultiSelect('ms-opdrachtstatus',uniek('opdrachtstatus'));
+  maakMultiSelect('ms-landcode',      uniek('landcode'));
+  maakMultiSelect('ms-handeling',     uniek('handeling'));
+  maakMultiSelect('ms-organisatie',   uniek('organisatie'));
+  maakMultiSelect('ms-werkplaats',    uniek('werkplaats'));
+
+  // Afgerond filters
+  maakMultiSelect('af-ms-opdrachtcode',  uniek('opdrachtcode'),   'renderOpdrachten()');
+  maakMultiSelect('af-ms-opdrachtstatus',uniek('opdrachtstatus'), 'renderOpdrachten()');
+  maakMultiSelect('af-ms-landcode',      uniek('landcode'),       'renderOpdrachten()');
+  maakMultiSelect('af-ms-organisatie',   uniek('organisatie'),    'renderOpdrachten()');
+  const monteurNamen = alleMonteurs.map(m => m.naam).filter(Boolean).sort();
+  maakMultiSelect('af-ms-monteur', monteurNamen, 'renderOpdrachten()');
+
+  // Dashboard filters
+  maakMultiSelect('dash-ms-opdrachtcode',  uniek('opdrachtcode'),   'renderDashboard()');
+  maakMultiSelect('dash-ms-opdrachtstatus',uniek('opdrachtstatus'), 'renderDashboard()');
+  maakMultiSelect('dash-ms-organisatie',   uniek('organisatie'),    'renderDashboard()');
+}
+
+function resetBoardFilter() {
+  document.getElementById('filter-zoek').value = '';
+  document.getElementById('filter-deadline').value = '';
+  ['opdrachtcode','opdrachtstatus','landcode','handeling','organisatie','werkplaats'].forEach(f => {
+    const panel = getMsPanel('ms-' + f);
+    if (panel) panel.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+    updateMsBtn('ms-' + f);
+  });
+  document.getElementById('filter-reset-btn')?.classList.remove('actief');
+  renderBoard();
+}
+
+function resetAfgerondFilter() {
+  document.getElementById('af-filter-zoek').value = '';
+  ['opdrachtcode','opdrachtstatus','landcode','organisatie','monteur'].forEach(f => {
+    const panel = getMsPanel('af-ms-' + f);
+    if (panel) panel.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+    updateMsBtn('af-ms-' + f);
+  });
+  renderOpdrachten();
+}
+
+function resetDashDatum() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('dash-van').value = today;
+  document.getElementById('dash-tm').value  = today;
+  renderDashboard();
+}
+
+function resetDashFilter() {
+  ['opdrachtcode','opdrachtstatus','organisatie'].forEach(f => {
+    const panel = getMsPanel('dash-ms-' + f);
+    if (panel) panel.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+    updateMsBtn('dash-ms-' + f);
+  });
+  document.getElementById('dash-filter-monteur').value = '';
+  resetDashDatum();
+}
+
+// Een regel is afgerond als status=519 OF als afgerond_op gevuld is.
+// Dit voorkomt dat externe syncs (Google Cloud) die status terugzetten naar 445
+// afgeronde opdrachten opnieuw laten verschijnen.
+function isRegelAfgerond(r) {
+  return String(r.status) === '519' || !!r.afgerond_op;
+}
+
+function isInstructieRegel(r) {
+  return (r.artikelcode || '').toLowerCase() === '99-werkplaats';
+}
+
+// Opdrachtnrs waarbij alle J-regels zijn afgerond → hele opdracht verbergen in planscherm.
+// Opdrachten zonder J-regels worden nooit automatisch uitgesloten.
+function jVolledigAfgerondSet() {
+  const map = {};
+  alleReparaties.forEach(r => {
+    if ((r.doorsluizenjn || '').toUpperCase() !== 'J') return;
+    if (!map[r.opdrachtnr]) map[r.opdrachtnr] = { totaal: 0, afgerond: 0 };
+    map[r.opdrachtnr].totaal++;
+    if (isRegelAfgerond(r)) map[r.opdrachtnr].afgerond++;
+  });
+  return new Set(
+    Object.entries(map)
+      .filter(([, v]) => v.totaal > 0 && v.afgerond === v.totaal)
+      .map(([nr]) => nr)
+  );
+}
+
+// Opdrachtnrs waarbij alle niet-instructie regels zijn afgerond (ongeacht J/N).
+// Instructie regels (99-werkplaats) tellen nooit mee als open werk.
+function volledigAfgerondSet() {
+  const map = {};
+  alleReparaties.forEach(r => {
+    if (isInstructieRegel(r)) return;  // 99-werkplaats regels negeren
+    if (!map[r.opdrachtnr]) map[r.opdrachtnr] = { totaal: 0, afgerond: 0 };
+    map[r.opdrachtnr].totaal++;
+    if (isRegelAfgerond(r)) map[r.opdrachtnr].afgerond++;
+  });
+  return new Set(
+    Object.entries(map)
+      .filter(([, v]) => v.totaal > 0 && v.afgerond === v.totaal)
+      .map(([nr]) => nr)
+  );
+}
+
+function gefilterdeOnverdeeld() {
+  const zoek           = (document.getElementById('filter-zoek')?.value || '').trim().toLowerCase();
+  const msOpdrachtcode = leesMultiSelect('ms-opdrachtcode');
+  const msStatus       = leesMultiSelect('ms-opdrachtstatus');
+  const msLandcode     = leesMultiSelect('ms-landcode');
+  const msHandeling    = leesMultiSelect('ms-handeling');
+  const msOrganisatie  = leesMultiSelect('ms-organisatie');
+  const msWerkplaats   = leesMultiSelect('ms-werkplaats');
+  const deadline       = document.getElementById('filter-deadline').value;
+  const nu             = new Date();
+
+  const heeftFilter = zoek || deadline ||
+    [msOpdrachtcode, msStatus, msLandcode, msHandeling, msOrganisatie, msWerkplaats].some(s => s.size > 0);
+  document.getElementById('filter-reset-btn')?.classList.toggle('actief', !!heeftFilter);
+
+  const jAfgerond   = jVolledigAfgerondSet();
+  const volAfgerond = volledigAfgerondSet();
+
+  return alleReparaties.filter(r => {
+    if (isInstructieRegel(r))        return false;   // 99-werkplaats nooit als open werk
+    if (r.monteur_id)                return false;
+    if (isRegelAfgerond(r))          return false;   // afgerond = nooit in onverdeeld
+    if (jAfgerond.has(r.opdrachtnr)) return false;
+    if (volAfgerond.has(r.opdrachtnr)) return false;
+    if (zoek                  && !(r.opdrachtnr || '').toLowerCase().includes(zoek)) return false;
+    if (msOpdrachtcode.size   && !msOpdrachtcode.has(r.opdrachtcode))   return false;
+    if (msStatus.size         && !msStatus.has(r.opdrachtstatus))        return false;
+    if (msLandcode.size       && !msLandcode.has(r.landcode))            return false;
+    if (msHandeling.size      && !msHandeling.has(r.handeling))          return false;
+    if (msOrganisatie.size    && !msOrganisatie.has(r.organisatie))      return false;
+    if (msWerkplaats.size     && !msWerkplaats.has(r.werkplaats))        return false;
+    if (deadline && r.uiterste_datum_afdeling) {
+      const d    = new Date(r.uiterste_datum_afdeling);
+      const dagen = Math.ceil((d - nu) / 86400000);
+      if (deadline === 'verlopen' && dagen > 0)           return false;
+      if (deadline === 'vandaag'  && (dagen < 0 || dagen > 1)) return false;
+      if (deadline === '3dagen'   && (dagen < 0 || dagen > 3)) return false;
+      if (deadline === 'week'     && (dagen < 0 || dagen > 7)) return false;
+    } else if (deadline) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// ── BOARD RENDER ─────────────────────────────────────────────────
+
+function renderBoard() {
+  renderOnverdeeld();
+  renderMonteurs();
+}
+
+const _geldigeOpdrachten = () => new Set(
+  alleReparaties.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J' && (r.artikelcode || '').toUpperCase() !== '99-WERKPLAATS').map(r => r.opdrachtnr)
+);
+
+function groepeerPerOpdracht(lijst) {
+  const geldig = _geldigeOpdrachten();
+  const groepen = {};
+  lijst.filter(r => geldig.has(r.opdrachtnr)).forEach(r => {
+    if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
+    groepen[r.opdrachtnr].push(r);
+  });
+  return Object.values(groepen)
+    .map(g => g.sort((a, b) => (a.regelnummer ?? 0) - (b.regelnummer ?? 0)))
+    .sort((a, b) => {
+      const da = a[0].uiterste_datum_afdeling ? new Date(a[0].uiterste_datum_afdeling) : new Date('9999-12-31');
+      const db = b[0].uiterste_datum_afdeling ? new Date(b[0].uiterste_datum_afdeling) : new Date('9999-12-31');
+      return da - db;
+    });
+}
+
+function renderOnverdeeld() {
+  const lijst   = gefilterdeOnverdeeld();
+  const body    = document.getElementById('onverdeeld-body');
+  const groepen = groepeerPerOpdracht(lijst);
+  document.getElementById('onverdeeld-count').textContent = groepen.length;
+
+  body.innerHTML = '';
+  if (groepen.length === 0) {
+    body.innerHTML = '<div class="drop-leeg">Geen onverdeelde opdrachten</div>';
+    return;
+  }
+  groepen.forEach(regels => body.appendChild(maakGroepKaart(regels, null)));
+}
+
+function renderMonteurs() {
+  const board = document.getElementById('monteurs-board');
+  board.innerHTML = '';
+
+  const verborgenIds = alleVerborgenIds();
+  const jAfgerond   = jVolledigAfgerondSet();
+  const volAfgerond = volledigAfgerondSet();
+  alleMonteurs.filter(m => !verborgenIds.includes(m.id) && m.productieplanning).forEach(m => {
+    const alleRegels = alleReparaties.filter(r => r.monteur_id === m.id);
+    // Sluit volledig afgeronde opdrachten uit:
+    // 1. Alle J-regels van de opdracht zijn afgerond (dan verdwijnen ook de N-regels)
+    // 2. Alle niet-instructie regels van de opdracht zijn afgerond
+    const groepMap = {};
+    alleRegels.forEach(r => { if (!groepMap[r.opdrachtnr]) groepMap[r.opdrachtnr] = []; groepMap[r.opdrachtnr].push(r); });
+    const actieveOpdrachtnrs = new Set(
+      Object.entries(groepMap)
+        .filter(([nr, rs]) => {
+          if (jAfgerond.has(nr))   return false;
+          if (volAfgerond.has(nr)) return false;
+          // Verberg ook als alle niet-instructie regels van deze monteur afgerond zijn,
+          // én de gehele opdracht geen open niet-instructie regels meer heeft
+          const werkRegels = rs.filter(r => !isInstructieRegel(r));
+          if (werkRegels.every(r => isRegelAfgerond(r))) {
+            const alleOpdrachtWerkRegels = alleReparaties.filter(x => x.opdrachtnr === nr && !isInstructieRegel(x));
+            if (alleOpdrachtWerkRegels.every(x => isRegelAfgerond(x))) return false;
+          }
+          return werkRegels.some(r => !isRegelAfgerond(r));
+        })
+        .map(([nr]) => nr)
+    );
+    const regels = alleRegels.filter(r => actieveOpdrachtnrs.has(r.opdrachtnr));
+    const groepen   = groepeerPerOpdracht(regels);
+
+    const kolom = document.createElement('div');
+    kolom.className = 'monteur-kolom';
+    kolom.innerHTML = `
+      <div class="monteur-kolom-header" style="position:relative">
+        <div class="monteur-avatar">${esc(m.initialen || m.naam.slice(0,2).toUpperCase())}</div>
+        <div class="monteur-info">
+          <div class="monteur-naam">${esc(m.naam)}</div>
+          <div class="monteur-sub">${groepen.length} opdracht${groepen.length !== 1 ? 'en' : ''} · ${regels.length} regel${regels.length !== 1 ? 's' : ''} · ${regels.reduce((s,r) => s + (parseInt(r.aantal)||0), 0)} stuks</div>
+        </div>
+        <button class="monteur-menu-btn" onclick="toggleGbMenu('${m.id}')" title="Opties">⋯</button>
+        <div class="gb-verborgen-panel" id="gb-menu-${m.id}">
+          <div class="gb-verborgen-item" onclick="verbergGebruiker('${m.id}')">
+            <span>👁</span> Gebruiker verbergen
+          </div>
+        </div>
+      </div>
+      <div class="monteur-body" id="monteur-body-${m.id}"
+        ondragover="onDragOver(event)"
+        ondrop="onDrop(event, '${m.id}')"
+        ondragleave="onDragLeave(event)">
+        ${groepen.length === 0 ? '<div class="drop-leeg">Sleep opdrachten hier</div>' : ''}
+      </div>
+    `;
+    board.appendChild(kolom);
+
+    const bodyEl = kolom.querySelector('.monteur-body');
+    groepen.forEach(gr => bodyEl.appendChild(maakGroepKaart(gr, m.id)));
+  });
+
+  // + kolom om verborgen gebruikers terug te zetten
+  const verborgen = alleVerborgenIds().map(id => alleMonteurs.find(m => m.id === id)).filter(Boolean);
+  if (verborgen.length) {
+    const plusKolom = document.createElement('div');
+    plusKolom.className = 'gebruiker-toevoegen-kolom';
+    plusKolom.style.position = 'relative';
+    plusKolom.innerHTML = `
+      <div style="position:relative">
+        <button class="gb-plus-btn" onclick="toggleGbHerstelPanel()" title="Verborgen gebruikers">+</button>
+        <div class="gb-verborgen-panel" id="gb-herstel-panel">
+          <div style="padding:8px 14px;font-size:11px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border)">VERBORGEN</div>
+          ${verborgen.map(m => `
+            <div class="gb-verborgen-item" onclick="herstelGebruiker('${m.id}')">
+              <span style="font-family:var(--mono);font-size:11px;font-weight:600">${esc(m.initialen)}</span> ${esc(m.naam)}
+            </div>`).join('')}
+        </div>
+      </div>`;
+    board.appendChild(plusKolom);
+  }
+}
+
+function toggleAfDetail(uid) {
+  const samenvatting = document.getElementById('af-sv-'  + uid);
+  const detail       = document.getElementById('af-det-' + uid);
+  const chevron      = document.getElementById('af-chv-' + uid);
+  if (!samenvatting || !detail) return;
+  const opening = detail.style.display === 'none';
+  detail.style.display       = opening ? 'block' : 'none';
+  samenvatting.style.display = opening ? 'none'  : 'block';
+  if (chevron) chevron.style.transform = opening ? 'rotate(90deg)' : '';
+}
+
+async function heropendOpdracht(nr) {
+  if (!confirm(`Opdracht ${nr} terugzetten naar de wachtrij?\nDe regels worden beschikbaar gesteld voor monteurs.`)) return;
+  const regels = alleReparaties.filter(r => r.opdrachtnr === nr && String(r.status) === '519');
+  if (!regels.length) { toast('Geen afgeronde regels gevonden voor ' + nr); return; }
+  let fout = null;
+  for (const r of regels) {
+    const { error } = await sb.from('reparaties').update({
+      status: '450', monteur_id: null, toegewezen_door: null,
+      in_behandeling_op: null, afgerond_op: null,
+    }).eq('id', r.id);
+    if (error) { fout = error; break; }
+    r.status = '450'; r.monteur_id = null; r.toegewezen_door = null;
+    r.in_behandeling_op = null; r.afgerond_op = null;
+  }
+  if (fout) { toast('Fout: ' + fout.message); return; }
+  // Verwijder uit lokale alleLogs zodat de opdracht verdwijnt uit afgerond-tab
+  alleLogs = alleLogs.filter(l => l.opdrachtnr !== nr);
+  toast(`✓ Opdracht ${nr} teruggezet naar wachtrij (${regels.length} regel${regels.length !== 1 ? 's' : ''})`);
+  renderBoard();
+  renderOpdrachten();
+}
+
+function toggleGroepSectie(sectieId, btnId) {
+  const el  = document.getElementById(sectieId);
+  const btn = document.getElementById(btnId);
+  if (!el) return;
+  const open = el.style.display === 'none' || el.style.display === '';
+  el.style.display = open ? 'block' : 'none';
+  btn?.classList.toggle('actief', open);
+}
+
+function deadlineInfo(r) {
+  if (!r.uiterste_datum_afdeling) return null;
+  const nu     = new Date();
+  const d      = new Date(r.uiterste_datum_afdeling);
+  const dagen  = Math.ceil((d - nu) / 86400000);
+  const label  = dagen <= 0 ? 'Verlopen' : dagen === 1 ? 'Morgen' : `${dagen} dagen`;
+  const kleur  = dagen <= 0 ? 'var(--danger)' : dagen <= 2 ? '#e66519' : dagen <= 7 ? 'var(--info)' : null;
+  const datumStr = d.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  return { label, kleur, datumStr, dagen };
+}
+
+function maakGroepKaart(regels, huidigeMonteurId) {
+  const hoofd      = regels[0];
+  const totaal     = regels.length;
+  const geclaimd   = regels.filter(r => r.monteur_id).length;
+  const gedeeltelijkGeclaimed = geclaimd > 0 && geclaimd < totaal;
+  const prio       = hoofd.prioriteit || 'normaal';
+  const dl         = deadlineInfo(hoofd);
+  const groepId    = `mgr-groep-${hoofd.opdrachtnr}-${huidigeMonteurId || 'onv'}`;
+
+  // Volledigheidscheck over ALLE monteurs heen (uit alleReparaties)
+  const alleJRegels       = alleReparaties.filter(r => r.opdrachtnr === hoofd.opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'J');
+  const totaalOpdracht    = alleJRegels.length;
+  const afgerondOpdracht  = alleJRegels.filter(r => String(r.status) === '519').length;
+  const volledigAfgerond  = totaalOpdracht > 0 && afgerondOpdracht === totaalOpdracht;
+  const gedeeltelijkAf   = afgerondOpdracht > 0 && afgerondOpdracht < totaalOpdracht;
+
+  // Hoeveel regels heeft déze monteur afgerond
+  const mijnJRegels   = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J');
+  const mijnAfgerond  = mijnJRegels.filter(r => String(r.status) === '519').length;
+
+  let borderStijl = '';
+  if      (volledigAfgerond)       borderStijl = 'border-left:3px solid var(--ok)';
+  else if (gedeeltelijkAf)         borderStijl = 'border-left:3px solid #e66519';
+  else if (gedeeltelijkGeclaimed)  borderStijl = 'border-left:3px solid var(--accent)';
+  else if (hoofd.toegewezen_door === 'manager') borderStijl = 'border-left:3px solid var(--accent)';
+  else if (hoofd.toegewezen_door === 'monteur') borderStijl = 'border-left:3px solid var(--danger)';
+
+  // Voortgangsbadge
+  let statusBadge = '';
+  if (volledigAfgerond) {
+    statusBadge = `<span style="font-size:10px;font-family:var(--mono);background:rgba(26,143,79,.12);color:var(--ok);border:1px solid rgba(26,143,79,.3);border-radius:10px;padding:1px 7px">✓ volledig · ${mijnAfgerond} afgerond</span>`;
+  } else if (gedeeltelijkAf) {
+    statusBadge = `<span style="font-size:10px;font-family:var(--mono);background:rgba(230,101,25,.1);color:#e66519;border:1px solid rgba(230,101,25,.3);border-radius:10px;padding:1px 7px">◑ ${afgerondOpdracht}/${totaalOpdracht} afgerond</span>`;
+  } else if (gedeeltelijkGeclaimed) {
+    statusBadge = `<span class="badge-gedeeltelijk-mgr">${geclaimd}/${totaal} ingenomen</span>`;
+  } else if (totaal > 1) {
+    statusBadge = `<span class="badge-regels-mgr">${totaal} regels</span>`;
+  }
+
+  const deadlineHTML = dl && dl.kleur
+    ? `<span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${dl.kleur};border:1px solid ${dl.kleur};border-radius:3px;padding:2px 6px">⏱ ${dl.label} · ${dl.datumStr}</span>`
+    : dl ? `<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${dl.datumStr}</span>` : '';
+
+  // Bouw het DOM-element
+  const kaart = document.createElement('div');
+  kaart.className = 'groep-kaart' + (gedeeltelijkGeclaimed ? ' gedeeltelijk' : '');
+  kaart.style.cssText = borderStijl;
+  kaart.dataset.opdrachtnr = hoofd.opdrachtnr;
+
+  // Splits op doorsluizenjn
+  const jRegels = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J');
+  const nRegels = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'N');
+
+  const regelRijHTML = r => {
+    const afgerond = String(r.status) === '519';
+    const bezet    = !afgerond && r.monteur_id && r.monteur_id !== huidigeMonteurId;
+    const eigen    = !afgerond && r.monteur_id && r.monteur_id === huidigeMonteurId;
+    const rijKlasse = afgerond
+      ? 'mgr-regel-rij'
+      : bezet ? 'mgr-regel-rij bezet' : eigen ? 'mgr-regel-rij eigen' : 'mgr-regel-rij';
+    const borderStijl = afgerond ? 'border-left:2px solid var(--ok);opacity:.6' : '';
+    const statusLabel = afgerond
+      ? `<span style="font-size:10px;color:var(--ok);font-family:var(--mono);flex-shrink:0">✓ afgerond</span>`
+      : bezet
+      ? `<span class="mgr-regel-bezet">${esc(r.monteurs?.naam) || 'Bezet'}</span>`
+      : '';
+    return `
+      <div class="${rijKlasse}" data-id="${r.id}" style="${borderStijl}">
+        <div class="mgr-regel-info" style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="min-width:0">
+              ${r.artikelcode ? `<div style="font-size:12px;font-weight:600;font-family:var(--mono);color:${afgerond ? 'var(--muted)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.artikelcode)}</div>` : ''}
+              ${r.apparaat_type ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.apparaat_type)}</div>` : ''}
+            </div>
+            ${r.aantal != null ? `<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--muted);flex-shrink:0">${r.aantal}×</span>` : ''}
+          </div>
+        </div>
+        ${statusLabel}
+      </div>`;
+  };
+
+  const werkRijsHTML = jRegels.map(regelRijHTML).join('');
+
+  const onderdeelSectieHTML = nRegels.length ? `
+    <div style="border-top:1px solid var(--border)">
+      <div style="padding:5px 12px;font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;cursor:pointer;display:flex;justify-content:space-between"
+           onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <span>Onderdelen (${nRegels.length})</span><span>▾</span>
+      </div>
+      <div style="display:none">
+        ${nRegels.map(r => `
+          <div class="mgr-regel-rij" style="opacity:.6;cursor:default" data-id="${r.id}">
+            <div class="mgr-regel-info" style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <div style="min-width:0">
+                  ${r.artikelcode ? `<div style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.artikelcode)}</div>` : ''}
+                  ${r.apparaat_type ? `<div style="font-size:11px;color:var(--muted)">${esc(r.apparaat_type)}</div>` : ''}
+                </div>
+                ${r.aantal != null ? `<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--muted);flex-shrink:0">${r.aantal}×</span>` : ''}
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const regelsHTML = werkRijsHTML + onderdeelSectieHTML;
+
+
+  // Werkplaats taken: apparaat_type waarden van 99-WERKPLAATS regels
+  const werkplaatsTaken = regels
+    .filter(r => (r.artikelcode || '').toUpperCase() === '99-WERKPLAATS' && r.apparaat_type)
+    .map(r => r.apparaat_type)
+    .filter((v, i, a) => a.indexOf(v) === i);
+
+  const opmerking = hoofd.klacht || '';
+
+  const wpSectieHTML = werkplaatsTaken.length ? `
+    <div class="groep-extra-sectie" id="wp-sectie-${groepId}" style="display:none">
+      <div class="groep-extra-label">Werkplaats werkzaamheden</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${werkplaatsTaken.map(t => `<span style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:12px">${esc(t)}</span>`).join('')}
+      </div>
+    </div>` : '';
+
+  const opmSectieHTML = opmerking ? `
+    <div class="groep-extra-sectie" id="opm-sectie-${groepId}" style="display:none">
+      <div class="groep-extra-label">Opmerking</div>
+      <div>${esc(opmerking)}</div>
+    </div>` : '';
+
+  kaart.innerHTML = `
+    <div class="groep-header">
+      <div class="groep-header-links">
+        <span class="kaart-nr">${esc(hoofd.opdrachtnr)}</span>
+        ${hoofd.opdrachtcode ? `<span class="mgr-opdrachtcode">${esc(hoofd.opdrachtcode)}</span>` : ''}
+        ${hoofd.opdrachtstatus ? `<span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 7px">${esc(hoofd.opdrachtstatus)}</span>` : ''}
+        ${hoofd.organisatie ? `<span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 7px">${esc(hoofd.organisatie)}</span>` : ''}
+        ${statusBadge}
+        ${deadlineHTML}
+      </div>
+      <div style="display:flex;align-items:center;gap:3px">
+        ${werkplaatsTaken.length ? `<button class="groep-icon-btn" id="wp-btn-${groepId}" title="Werkplaats werkzaamheden" onclick="event.stopPropagation();toggleGroepSectie('wp-sectie-${groepId}','wp-btn-${groepId}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </button>` : ''}
+        ${opmerking ? `<button class="groep-icon-btn" id="opm-btn-${groepId}" title="Opmerking" onclick="event.stopPropagation();toggleGroepSectie('opm-sectie-${groepId}','opm-btn-${groepId}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>` : ''}
+        <span class="groep-chevron open" id="chevron-${groepId}">▸</span>
+      </div>
+    </div>
+    ${wpSectieHTML}
+    ${opmSectieHTML}
+    <div class="groep-regels" id="${groepId}" style="display:flex;flex-direction:column">
+      ${regelsHTML}
+    </div>
+  `;
+
+  // Chevron toggle
+  kaart.querySelector('.groep-chevron').addEventListener('click', e => {
+    e.stopPropagation();
+    const el      = document.getElementById(groepId);
+    const chevron = document.getElementById('chevron-' + groepId);
+    const opening = el.style.display === 'none';
+    el.style.display = opening ? 'flex' : 'none';
+    el.style.flexDirection = 'column';
+    chevron.classList.toggle('open', opening);
+  });
+
+  // Drag op groepkaart = alle regels van deze opdracht (vrij én bezet)
+  const alleIds = regels.map(r => r.id);
+  if (alleIds.length > 0) {
+    kaart.draggable = true;
+    kaart.addEventListener('dragstart', e => {
+      dragReparatieIds = alleIds;
+      setTimeout(() => kaart.classList.add('dragging'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+      e.stopPropagation();
+    });
+    kaart.addEventListener('dragend', () => {
+      kaart.classList.remove('dragging');
+      dragReparatieIds = [];
+    });
+  }
+
+  // Drag op individuele regel-rijen (vrij én bezet)
+  kaart.querySelectorAll('.mgr-regel-rij').forEach(rij => {
+    const rid = rij.dataset.id;
+    if (!rid) return;
+    rij.draggable = true;
+    rij.style.cursor = 'grab';
+    rij.addEventListener('dragstart', e => {
+      dragReparatieIds = [rid];
+      e.dataTransfer.effectAllowed = 'move';
+      e.stopPropagation();
+    });
+    rij.addEventListener('dragend', () => { dragReparatieIds = []; });
+  });
+
+  return kaart;
+}
+
+// ── DRAG & DROP ───────────────────────────────────────────────────
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function onDragOverBestel(e) {
+  if (!dragReparatieIds.length) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+async function onDropBestel(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!dragReparatieIds.length) return;
+
+  const gesleepteIds = [...dragReparatieIds];
+  dragReparatieIds = [];
+  realtimeBlocked = true;
+
+  const originals = [];
+  gesleepteIds.forEach(id => {
+    const rep = alleReparaties.find(r => r.id === id);
+    if (!rep) return;
+    originals.push({ rep, orig: { status: rep.status, monteur_id: rep.monteur_id, toegewezen_door: rep.toegewezen_door, monteurs: rep.monteurs, in_behandeling_op: rep.in_behandeling_op } });
+    rep.status = '450';
+    rep.monteur_id = null;
+    rep.toegewezen_door = null;
+    rep.monteurs = null;
+    rep.in_behandeling_op = null;
+  });
+  renderBoard();
+
+  let fout = null;
+  for (const id of gesleepteIds) {
+    const { error } = await sb.from('reparaties').update({ status: '450', monteur_id: null, toegewezen_door: null, in_behandeling_op: null }).eq('id', id);
+    if (error) { fout = error; break; }
+  }
+
+  if (fout) {
+    originals.forEach(({ rep, orig }) => Object.assign(rep, orig));
+    renderBoard();
+    toast('Fout: ' + fout.message);
+    realtimeBlocked = false;
+    return;
+  }
+
+  const label = gesleepteIds.length > 1 ? `${gesleepteIds.length} regels` : '1 regel';
+  toast(`📦 ${label} naar onderdelen bestellen`);
+  setTimeout(() => { realtimeBlocked = false; }, 1500);
+}
+
+async function onDrop(e, monteurId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+
+  if (!dragReparatieIds.length) return;
+
+  const gesleepteIds  = [...dragReparatieIds];
+  dragReparatieIds    = [];
+  realtimeBlocked     = true;
+
+  const now        = new Date().toISOString();
+  const updateData = monteurId
+    ? { monteur_id: monteurId, toegewezen_door: 'manager', status: '465', in_behandeling_op: now }
+    : { monteur_id: null, toegewezen_door: null, status: '445', in_behandeling_op: null };
+
+  // Optimistische update voor alle gesleepte regels
+  const originals = [];
+  gesleepteIds.forEach(id => {
+    const rep = alleReparaties.find(r => r.id === id);
+    if (!rep) return;
+    originals.push({ rep, orig: { monteur_id: rep.monteur_id, toegewezen_door: rep.toegewezen_door, monteurs: rep.monteurs, status: rep.status, in_behandeling_op: rep.in_behandeling_op } });
+    rep.monteur_id        = monteurId;
+    rep.toegewezen_door   = monteurId ? 'manager' : null;
+    rep.monteurs          = monteurId ? (alleMonteurs.find(m => m.id === monteurId) || null) : null;
+    rep.status            = monteurId ? '465' : '445';
+    rep.in_behandeling_op = monteurId ? now : null;
+  });
+  renderBoard();
+
+  // Stuur updates naar Supabase
+  let fout = null;
+  for (const id of gesleepteIds) {
+    const { error } = await sb.from('reparaties').update(updateData).eq('id', id);
+    if (error) { fout = error; break; }
+  }
+
+  if (fout) {
+    // Terugdraaien
+    originals.forEach(({ rep, orig }) => Object.assign(rep, orig));
+    renderBoard();
+    toast('Fout bij toewijzen: ' + fout.message);
+    realtimeBlocked = false;
+    return;
+  }
+
+  const monteur = monteurId ? alleMonteurs.find(m => m.id === monteurId) : null;
+  const label   = gesleepteIds.length > 1 ? `${gesleepteIds.length} regels` : '1 regel';
+  toast(monteur ? `${label} toegewezen aan ${monteur.naam}` : `${label} teruggeplaatst`);
+
+  setTimeout(() => { realtimeBlocked = false; }, 1500);
+}
+
+// ── VOORRAAD ─────────────────────────────────────────────────────
+
+function renderVoorraad() {
+  const container = document.getElementById('voorraad-content');
+  if (alleOnderdelen.length === 0) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:13px;">Geen onderdelen gevonden.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  alleOnderdelen.forEach(o => {
+    const taken = voorraadTaken.filter(t => t.onderdeel_id === o.id);
+    const laag  = o.voorraad_min != null && (o.voorraad_aantal || 0) <= o.voorraad_min;
+
+    const kaart = document.createElement('div');
+    kaart.className = 'voorraad-kaart';
+
+    const monteursOpties = alleMonteurs
+      .map(m => `<option value="${m.id}">${esc(m.naam)}</option>`)
+      .join('');
+
+    const takenHtml = taken.map(t => `
+      <div class="voorraad-taak">
+        <span>Aanvullen → <span class="taak-monteur">${esc(t.monteurs?.naam) || '—'}</span></span>
+        <button class="taak-verwijder" onclick="verwijderVoorraadTaak('${t.id}')">✕</button>
+      </div>
+    `).join('');
+
+    kaart.innerHTML = `
+      <div class="voorraad-kaart-top">
+        <div>
+          <div class="voorraad-naam">${esc(o.naam)}</div>
+          <div class="voorraad-artnr">${esc(o.artikelnr) || '—'}</div>
+        </div>
+        <span class="voorraad-badge ${laag ? 'badge-laag' : 'badge-ok'}">
+          ${laag ? 'Laag' : 'OK'} · ${o.voorraad_aantal ?? '?'}
+        </span>
+      </div>
+      <div class="voorraad-monteur-rij">
+        <span class="voorraad-monteur-label">Toewijzen aan:</span>
+        <select class="voorraad-select" id="vt-select-${o.id}">
+          <option value="">Kies monteur...</option>
+          ${monteursOpties}
+        </select>
+        <button class="voorraad-btn" onclick="wijsVoorraadToe('${o.id}')">Taak aanmaken</button>
+      </div>
+      ${taken.length > 0 ? `<div class="voorraad-taak-lijst">${takenHtml}</div>` : ''}
+    `;
+
+    container.appendChild(kaart);
+  });
+}
+
+async function wijsVoorraadToe(onderdeelId) {
+  const sel       = document.getElementById(`vt-select-${onderdeelId}`);
+  const monteurId = sel.value;
+  if (!monteurId) { toast('Kies eerst een monteur'); return; }
+
+  const { error } = await sb.from('voorraad_taken').insert({
+    onderdeel_id: onderdeelId,
+    monteur_id:   monteurId,
+  });
+
+  if (error) { toast('Fout: ' + error.message); return; }
+
+  sel.value = '';
+  toast('Voorraadtaak aangemaakt');
+  await laadVoorraadTaken();
+}
+
+async function verwijderVoorraadTaak(taakId) {
+  const { error } = await sb.from('voorraad_taken').delete().eq('id', taakId);
+  if (error) { toast('Fout: ' + error.message); return; }
+  await laadVoorraadTaken();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────
+
+
+function toonTab(naam) {
+  ['verdeel', 'voorraad', 'afgerond', 'onderdelen', 'dashboard', 'tagnr', 'functies'].forEach(t => {
+    document.getElementById(`tab-${t}`)?.classList.toggle('active', t === naam);
+    document.getElementById(`tab-btn-${t}`)?.classList.toggle('active', t === naam);
+  });
+  if (naam === 'verdeel')    renderBoard();
+  if (naam === 'afgerond')   renderOpdrachten();
+  if (naam === 'onderdelen') renderManagerOnderdelen();
+  if (naam === 'dashboard')  renderDashboard();
+  if (naam === 'tagnr')      renderTagnrTab();
+  if (naam === 'functies')   laadFunctiebeheer();
+}
+
+// ── FUNCTIEBEHEER ─────────────────────────────────────────────────
+
+const FB_KOLOMMEN = [
+  { kolom: 'werkplaats_toegang',     label: 'Werkplaats',       sub: 'Werkplaats tab'         },
+  { kolom: 'witgoed_toegang',        label: 'Witgoed',          sub: 'Witgoed tab'            },
+  { kolom: 'is_onderdelenbeheerder', label: 'Onderdelen',       sub: 'Onderdelen tab'         },
+  { kolom: 'witgoed_voorraadbeheer', label: 'N.o.v.',           sub: 'N.o.v. tab'             },
+  { kolom: 'locatie_aanpassen',      label: 'Locatie',          sub: 'Locatie module'         },
+  { kolom: 'werkvoorbereider',       label: 'Apparaat koppelen', sub: 'Apparaat koppelen tab'  },
+  { kolom: 'productieplanning',      label: 'Productieplanning',sub: 'Opdrachten verdelen'    },
+  { kolom: 'is_admin',               label: 'Admin',            sub: 'Volledig beheer'        },
+];
+
+async function laadFunctiebeheer() {
+  const el = document.getElementById('fb-inhoud');
+  el.className = 'fb-laden'; el.textContent = 'Laden…';
+  try {
+    const kolommen = FB_KOLOMMEN.map(k => k.kolom).join(', ');
+    const { data, error } = await sb.from('monteurs')
+      .select(`id, naam, ${kolommen}`)
+      .eq('actief', true)
+      .order('naam');
+    if (error) throw error;
+    if (!data?.length) { el.textContent = 'Geen monteurs gevonden'; return; }
+
+    const thHTML = FB_KOLOMMEN.map(k => `
+      <th>
+        <div class="fb-kolom-header">
+          <span>${k.label}</span>
+          <span class="fb-kolom-sub">${k.sub}</span>
+        </div>
+      </th>`).join('');
+
+    const rijen = data.map(m => {
+      const toggles = FB_KOLOMMEN.map(k => {
+        const aan = !!(m[k.kolom]);
+        return `<td style="text-align:center">
+          <button class="fb-toggle ${aan ? 'aan' : 'uit'}"
+            onclick="fbToggle('${m.id.replace(/'/g,"\\'")}','${k.kolom}',this)"
+            title="${k.label}: ${aan ? 'Aan' : 'Uit'}">
+          </button>
+        </td>`;
+      }).join('');
+      return `<tr><td><div class="fb-naam">${esc(m.naam)}</div></td>${toggles}</tr>`;
+    }).join('');
+
+    el.className = '';
+    el.innerHTML = `<table class="fb-tabel">
+      <thead><tr><th>Monteur</th>${thHTML}</tr></thead>
+      <tbody>${rijen}</tbody>
+    </table>`;
+  } catch(e) {
+    el.className = 'fb-laden';
+    el.innerHTML = `<span style="color:var(--danger)">Fout: ${e.message}</span>`;
+  }
+}
+
+async function fbToggle(monteurId, kolom, btn) {
+  btn.disabled = true;
+  const nieuweWaarde = !btn.classList.contains('aan');
+  try {
+    const { error } = await sb.from('monteurs').update({ [kolom]: nieuweWaarde }).eq('id', monteurId);
+    if (error) throw error;
+    btn.classList.toggle('aan',  nieuweWaarde);
+    btn.classList.toggle('uit', !nieuweWaarde);
+  } catch(e) {
+    toast('Fout: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
+// ── TAGNR TAB ─────────────────────────────────────────────────────
+
+function renderTagnrTab() {
+  const fOpdracht = (document.getElementById('tagnr-filter-opdracht')?.value || '').trim().toLowerCase();
+  const fArtikel  = (document.getElementById('tagnr-filter-artikel')?.value  || '').trim().toLowerCase();
+  const fTagnr    = (document.getElementById('tagnr-filter-tagnr')?.value    || '').trim().toLowerCase();
+
+  const gefilterd = alleTagnrScans.filter(r => {
+    if (fOpdracht && !(r.opdrachtnr  || '').toLowerCase().includes(fOpdracht)) return false;
+    if (fArtikel  && !(r.artikelcode || '').toLowerCase().includes(fArtikel))  return false;
+    if (fTagnr    && !(r.tagnr       || '').toLowerCase().includes(fTagnr))    return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('tagnr-tabel-body');
+  const leeg  = document.getElementById('tagnr-tabel-leeg');
+  const tel   = document.getElementById('tagnr-tab-tel');
+
+  if (!tbody) return;
+
+  if (gefilterd.length === 0) {
+    tbody.innerHTML = '';
+    if (leeg) leeg.style.display = '';
+    if (tel)  tel.textContent = 'Geen resultaten';
+    return;
+  }
+
+  if (leeg) leeg.style.display = 'none';
+  if (tel)  tel.textContent = `${gefilterd.length} tagnummer${gefilterd.length !== 1 ? 's' : ''}`;
+
+  const monteurNaam = (id) => {
+    const m = alleMonteurs.find(m => m.id === id);
+    return m ? (m.initialen || m.naam) : (id || '—');
+  };
+
+  tbody.innerHTML = gefilterd.map(r => {
+    const datum = r.aangemaakt_op ? new Date(r.aangemaakt_op).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    return `<tr style="border-bottom:1px solid var(--border);font-size:13px">
+      <td style="padding:8px 12px">${esc(r.opdrachtnr || '—')}</td>
+      <td style="padding:8px 12px">${esc(String(r.regelnummer ?? '—'))}</td>
+      <td style="padding:8px 12px">${esc(r.artikelcode || '—')}</td>
+      <td style="padding:8px 12px;font-family:var(--mono)">${esc(r.tagnr || '—')}</td>
+      <td style="padding:8px 12px">${esc(monteurNaam(r.monteur_id))}</td>
+      <td style="padding:8px 12px;color:var(--muted)">${datum}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── ONDERDELEN BEHEER (MANAGER) ────────────────────────────────
+
+let mgrOndKleuren = {}; // opdrachtnr → kleur (geladen via Supabase)
+
+async function laadMgrOndKleuren() {
+  try {
+    const { data } = await sb.from('onderdelen_kleuren').select('opdrachtnr, kleur');
+    if (data) data.forEach(r => { mgrOndKleuren[r.opdrachtnr] = r.kleur; });
+  } catch {}
+}
+
+async function renderManagerOnderdelen() {
+  await laadMgrOndKleuren();
+
+  // ── Opdrachten die wachten op onderdelen ──
+  const lijst = document.getElementById('mgr-ond-lijst');
+  if (lijst) {
+    const groepen = {};
+    alleReparaties.filter(r => r.status === '480').forEach(r => {
+      if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
+      groepen[r.opdrachtnr].push(r);
+    });
+    const alleGroepen = Object.values(groepen).sort((a,b) => new Date(a[0].aangemaakt_op) - new Date(b[0].aangemaakt_op));
+
+    if (!alleGroepen.length) {
+      lijst.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted)">Geen opdrachten wachten op onderdelen</div>';
+    } else {
+      lijst.innerHTML = alleGroepen.map(regels => {
+        const h = regels[0];
+        const kleur = mgrOndKleuren[h.opdrachtnr] || 'oranje';
+        const kaartId = 'mgr-ond-' + h.opdrachtnr.replace(/[^a-z0-9]/gi,'_');
+        const monteurNaam = [...new Set(regels.filter(r=>r.monteurs?.naam).map(r=>r.monteurs.naam))].join(', ');
+        const datum = h.aangemaakt_op ? new Date(h.aangemaakt_op).toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit'}) : '';
+        return `<div class="mgr-ond-kaart kleur-${kleur}" id="${kaartId}">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+            <span style="font-family:var(--mono);font-weight:700;font-size:13px">${esc(h.opdrachtnr)}</span>
+            <span style="font-size:11px;color:var(--muted)">${esc(h.opdrachtcode)||''} ${datum}</span>
+          </div>
+          <div style="font-size:13px;font-weight:500;color:var(--text);margin:2px 0">${esc(h.klant_naam)||''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${esc(h.klacht)||'—'}</div>
+          ${monteurNaam ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Monteur: ${esc(monteurNaam)}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;color:var(--muted)">Status:</span>
+            ${['oranje','rood','groen'].map(k=>`<button class="mgr-ond-kleur-knop${kleur===k?' actief':''}" data-kleur="${k}" title="${k}" onclick="mgrZetOndKleur('${h.opdrachtnr}','${k}',this)"></button>`).join('')}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Rol: onderdelenbeheerders ──
+  const odbLijst = document.getElementById('mgr-odb-lijst');
+  if (odbLijst) {
+    if (!alleMonteurs.length) {
+      odbLijst.innerHTML = '<div style="font-size:13px;color:var(--muted)">Geen monteurs gevonden</div>';
+    } else {
+      odbLijst.innerHTML = alleMonteurs.map(m => {
+        const aan = !!m.is_onderdelenbeheerder;
+        return `<div class="mgr-odb-rij">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.naam}</div>
+            <div style="font-size:11px;color:var(--muted)">${m.initialen}</div>
+          </div>
+          <button class="mgr-odb-toggle${aan?' aan':''}" title="${aan?'Klik om te verwijderen':'Klik om toe te wijzen'}"
+                  onclick="toggleOndBeheerder('${m.id}',${aan},this)"></button>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+async function mgrZetOndKleur(opdrachtnr, kleur, knopEl) {
+  mgrOndKleuren[opdrachtnr] = kleur;
+  const kaartId = 'mgr-ond-' + opdrachtnr.replace(/[^a-z0-9]/gi,'_');
+  const kaart = document.getElementById(kaartId);
+  if (kaart) {
+    kaart.classList.remove('kleur-oranje','kleur-rood','kleur-groen');
+    kaart.classList.add('kleur-' + kleur);
+    kaart.querySelectorAll('.mgr-ond-kleur-knop').forEach(k => k.classList.toggle('actief', k.dataset.kleur === kleur));
+  }
+  try {
+    await sb.from('onderdelen_kleuren')
+      .upsert({ opdrachtnr, kleur, bijgewerkt_op: new Date().toISOString() }, { onConflict: 'opdrachtnr' });
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
+async function toggleOndBeheerder(monteurId, isAan, knopEl) {
+  const nieuw = !isAan;
+  try {
+    const { error } = await sb.from('monteurs')
+      .update({ is_onderdelenbeheerder: nieuw })
+      .eq('id', monteurId);
+    if (error) throw error;
+    // Update lokale state
+    const m = alleMonteurs.find(x => String(x.id) === String(monteurId));
+    if (m) m.is_onderdelenbeheerder = nieuw;
+    knopEl.classList.toggle('aan', nieuw);
+    knopEl.title = nieuw ? 'Klik om te verwijderen' : 'Klik om toe te wijzen';
+    toast(nieuw ? '✓ Onderdelenbeheerder toegewezen' : '↩ Rol verwijderd');
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+
+const KLEUR_PALET = ['#ec6500','#004582','#1a8f4f','#9c27b0','#00838f','#c62828','#795548','#607d8b','#1565c0','#558b2f','#ad1457','#e65100'];
+
+function volgendeWerkdag(vanDatum) {
+  const d = new Date(vanDatum);
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+function maakUurGrafiekSVG(logs, monteurKleurMap, activeMonteur) {
+  if (!logs.length) return '<div style="padding:24px 16px;font-size:13px;color:var(--muted)">Geen data voor deze periode</div>';
+
+  // Bouw uur-buckets: { uur: { monteurKey: Set<opdrachtnr> } }
+  const uurData = {};
+  let minUur = 23, maxUur = 0;
+  logs.forEach(l => {
+    const uur = new Date(l.aangemaakt_op).getHours();
+    minUur = Math.min(minUur, uur); maxUur = Math.max(maxUur, uur);
+    if (!uurData[uur]) uurData[uur] = {};
+    const key = String(l.monteur_id || l.monteur_naam || '?');
+    if (!uurData[uur][key]) uurData[uur][key] = new Set();
+    uurData[uur][key].add(l.opdrachtnr);
+  });
+  // Zet Sets om naar aantallen
+  Object.values(uurData).forEach(slot =>
+    Object.keys(slot).forEach(k => { slot[k] = slot[k].size; })
+  );
+
+  const uren = [];
+  for (let u = Math.max(0, minUur - 1); u <= Math.min(23, maxUur + 1); u++) uren.push(u);
+
+  let maxVal = 0;
+  uren.forEach(u => { const t = Object.values(uurData[u] || {}).reduce((s,v)=>s+v,0); maxVal = Math.max(maxVal, t); });
+  if (!maxVal) maxVal = 1;
+
+  const monteurIds = Object.keys(monteurKleurMap);
+  const W = Math.max(560, uren.length * 54);
+  const H = 200, PL = 38, PR = 10, PT = 14, PB = 28;
+  const cW = W - PL - PR, cH = H - PT - PB;
+  const slotW = cW / uren.length;
+  const barW  = Math.max(8, Math.min(36, slotW * 0.65));
+
+  let elems = '';
+
+  // Horizontale gridlijnen + Y-labels
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = Math.round((i / ySteps) * maxVal);
+    const y   = H - PB - (i / ySteps) * cH;
+    elems += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W - PR}" y2="${y.toFixed(1)}" style="stroke:var(--border);stroke-width:1"/>`;
+    elems += `<text x="${(PL - 5).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:10px;font-family:var(--mono)">${val}</text>`;
+  }
+
+  // Balken
+  uren.forEach((u, i) => {
+    const x = PL + i * slotW + (slotW - barW) / 2;
+    let yOff = H - PB;
+    const total = Object.values(uurData[u] || {}).reduce((s,v)=>s+v, 0);
+
+    monteurIds.forEach(id => {
+      const val = (uurData[u] || {})[id] || 0;
+      if (!val) return;
+      const bH = (val / maxVal) * cH;
+      yOff -= bH;
+      const dimmed = activeMonteur && activeMonteur !== id;
+      elems += `<rect x="${x.toFixed(1)}" y="${yOff.toFixed(1)}" width="${barW.toFixed(1)}" height="${bH.toFixed(1)}" fill="${monteurKleurMap[id]}" rx="2" opacity="${dimmed ? 0.25 : 1}" style="cursor:pointer" onclick="dashToggleMonteur('${id}')"/>`;
+      if (bH > 14 && !dimmed) {
+        elems += `<text x="${(x + barW/2).toFixed(1)}" y="${(yOff + bH/2 + 4).toFixed(1)}" text-anchor="middle" style="fill:#fff;font-size:10px;font-family:var(--mono);pointer-events:none">${val}</text>`;
+      }
+    });
+
+    if (total > 0) {
+      const topY = H - PB - (total / maxVal) * cH;
+      elems += `<text x="${(x + barW/2).toFixed(1)}" y="${(topY - 4).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:10px;font-family:var(--mono);font-weight:600">${total}</text>`;
+    }
+
+    // X-label
+    elems += `<text x="${(PL + i * slotW + slotW/2).toFixed(1)}" y="${(H - PB + 16).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:11px;font-family:var(--mono)">${u}u</text>`;
+  });
+
+  return `<svg width="${W}" height="${H}" style="display:block;min-width:100%">${elems}</svg>`;
+}
+
+function maakDagGrafiekSVG(logs, monteurKleurMap, activeMonteur) {
+  if (!logs.length) return '<div style="padding:24px 16px;font-size:13px;color:var(--muted)">Geen data voor deze periode</div>';
+
+  const dagData = {};
+  logs.forEach(l => {
+    const d = new Date(l.aangemaakt_op);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (!dagData[key]) dagData[key] = {};
+    const montKey = String(l.monteur_id || l.monteur_naam || '?');
+    if (!dagData[key][montKey]) dagData[key][montKey] = new Set();
+    dagData[key][montKey].add(l.opdrachtnr);
+  });
+  Object.values(dagData).forEach(slot =>
+    Object.keys(slot).forEach(k => { slot[k] = slot[k].size; })
+  );
+
+  const dagen = Object.keys(dagData).sort();
+  let maxVal = 0;
+  dagen.forEach(d => { const t = Object.values(dagData[d]).reduce((s,v)=>s+v,0); maxVal = Math.max(maxVal,t); });
+  if (!maxVal) maxVal = 1;
+
+  const monteurIds = Object.keys(monteurKleurMap);
+  const W = Math.max(400, dagen.length * 64);
+  const H = 200, PL = 38, PR = 10, PT = 14, PB = 28;
+  const cW = W - PL - PR, cH = H - PT - PB;
+  const slotW = cW / dagen.length;
+  const barW  = Math.max(10, Math.min(44, slotW * 0.65));
+
+  let elems = '';
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = Math.round((i / ySteps) * maxVal);
+    const y   = H - PB - (i / ySteps) * cH;
+    elems += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" style="stroke:var(--border);stroke-width:1"/>`;
+    elems += `<text x="${(PL-5).toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:10px;font-family:var(--mono)">${val}</text>`;
+  }
+
+  dagen.forEach((dag, i) => {
+    const x = PL + i * slotW + (slotW - barW) / 2;
+    let yOff = H - PB;
+    const total = Object.values(dagData[dag] || {}).reduce((s,v)=>s+v, 0);
+
+    monteurIds.forEach(id => {
+      const val = (dagData[dag] || {})[id] || 0;
+      if (!val) return;
+      const bH = (val / maxVal) * cH;
+      yOff -= bH;
+      const dimmed = activeMonteur && activeMonteur !== id;
+      elems += `<rect x="${x.toFixed(1)}" y="${yOff.toFixed(1)}" width="${barW.toFixed(1)}" height="${bH.toFixed(1)}" fill="${monteurKleurMap[id]}" rx="2" opacity="${dimmed ? 0.25 : 1}" style="cursor:pointer" onclick="dashToggleMonteur('${id}')"/>`;
+      if (bH > 14 && !dimmed) {
+        elems += `<text x="${(x+barW/2).toFixed(1)}" y="${(yOff+bH/2+4).toFixed(1)}" text-anchor="middle" style="fill:#fff;font-size:10px;font-family:var(--mono);pointer-events:none">${val}</text>`;
+      }
+    });
+
+    if (total > 0) {
+      const topY = H - PB - (total / maxVal) * cH;
+      elems += `<text x="${(x+barW/2).toFixed(1)}" y="${(topY-4).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:10px;font-family:var(--mono);font-weight:600">${total}</text>`;
+    }
+
+    const d = new Date(dag + 'T12:00:00');
+    const lbl = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+    elems += `<text x="${(PL+i*slotW+slotW/2).toFixed(1)}" y="${(H-PB+16).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:10px;font-family:var(--mono)">${lbl}</text>`;
+  });
+
+  return `<svg width="${W}" height="${H}" style="display:block;min-width:100%">${elems}</svg>`;
+}
+
+function dashInplannen(code) {
+  // Zet alleen deze code actief in de verdeel-filter
+  const panel = getMsPanel('ms-opdrachtcode');
+  if (panel) {
+    panel.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.checked = cb.value === code;
+    });
+    updateMsBtn('ms-opdrachtcode');
+  }
+  toonTab('verdeel');
+}
+
+function dashToggleCode(code) {
+  const panel = getMsPanel('dash-ms-opdrachtcode');
+  if (!panel) return;
+  const cb = [...panel.querySelectorAll('input[type=checkbox]')].find(c => c.value === code);
+  if (cb) { cb.checked = !cb.checked; updateMsBtn('dash-ms-opdrachtcode'); }
+  renderDashboard();
+}
+
+function dashToggleMonteur(id) {
+  const sel = document.getElementById('dash-filter-monteur');
+  if (!sel) return;
+  sel.value = sel.value === String(id) ? '' : String(id);
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const vandaag = new Date(); vandaag.setHours(0, 0, 0, 0);
+  const morgen  = new Date(vandaag); morgen.setDate(morgen.getDate() + 1);
+  const volgDag  = volgendeWerkdag(vandaag);
+  const volgMorg = new Date(volgDag); volgMorg.setDate(volgMorg.getDate() + 1);
+  const over7    = new Date(vandaag); over7.setDate(over7.getDate() + 7);
+
+  // Periode bepalen vanuit van/tm inputs
+  const vanVal = document.getElementById('dash-van')?.value;
+  const tmVal  = document.getElementById('dash-tm')?.value;
+  const periodeStart = vanVal ? new Date(vanVal) : new Date(vandaag);
+  const periodeEind  = tmVal  ? (() => { const d = new Date(tmVal); d.setDate(d.getDate() + 1); return d; })() : new Date(morgen);
+  const meerdagig = periodeStart.getTime() !== periodeEind.getTime() - 86400000 ||
+                    periodeStart.getTime() !== vandaag.getTime();
+
+  // Datumkop
+  const fmt = d => d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long' });
+  const isSameDay = periodeStart.getTime() === periodeEind.getTime() - 86400000;
+  let datumLabel;
+  if (isSameDay) {
+    const raw = periodeStart.toLocaleDateString('nl-NL', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    datumLabel = raw.charAt(0).toUpperCase() + raw.slice(1);
+  } else {
+    datumLabel = fmt(periodeStart) + ' – ' + fmt(new Date(periodeEind.getTime() - 86400000));
+  }
+  const datumLabelEl = document.getElementById('dash-datum-label');
+  if (datumLabelEl) datumLabelEl.textContent = datumLabel;
+
+  const msCode   = leesMultiSelect('dash-ms-opdrachtcode');
+  const msStatus = leesMultiSelect('dash-ms-opdrachtstatus');
+  const msOrg    = leesMultiSelect('dash-ms-organisatie');
+  const filterMont = document.getElementById('dash-filter-monteur')?.value || '';
+
+  // Vul monteur-dropdown eenmalig
+  const sel = document.getElementById('dash-filter-monteur');
+  if (sel && sel.options.length <= 1) {
+    alleMonteurs.forEach(m => {
+      const o = document.createElement('option');
+      o.value = String(m.id); o.textContent = m.naam;
+      sel.appendChild(o);
+    });
+  }
+
+  const matchCode = r => {
+    if (msCode.size   && !msCode.has(r.opdrachtcode   || '')) return false;
+    if (msStatus.size && !msStatus.has(r.opdrachtstatus || '')) return false;
+    if (msOrg.size    && !msOrg.has(r.organisatie     || '')) return false;
+    return true;
+  };
+  const matchMont = id => !filterMont || String(id) === filterMont;
+
+  const grid = document.getElementById('dash-grid');
+  grid.innerHTML = '';
+
+  // Lookup reparatie per opdrachtnr voor status/organisatie filters op logs
+  const repLookup = {};
+  alleReparaties.forEach(r => { if (r.opdrachtnr) repLookup[r.opdrachtnr] = r; });
+
+  // Logs van geselecteerde periode — alle actieve filters toegepast
+  const logsVandaag = alleLogs.filter(l => {
+    const d = new Date(l.aangemaakt_op);
+    if (!(d >= periodeStart && d < periodeEind)) return false;
+    if (!matchMont(l.monteur_id)) return false;
+    if (msCode.size   && !msCode.has(l.opdrachtcode || '')) return false;
+    const rep = repLookup[l.opdrachtnr] || {};
+    if (msStatus.size && !msStatus.has(rep.opdrachtstatus || '')) return false;
+    if (msOrg.size    && !msOrg.has(rep.organisatie    || '')) return false;
+    return true;
+  });
+
+  // ── 1. Opdrachtcode overzicht ────────────────────────────────────
+  const openReps = alleReparaties.filter(r =>
+    String(r.status) !== '519' && matchCode(r) && matchMont(r.monteur_id)
+  );
+
+  const alleCodes = [...new Set([
+    ...openReps.map(r => r.opdrachtcode),
+    ...logsVandaag.map(l => l.opdrachtcode)
+  ].filter(Boolean))].sort();
+
+  // Helper: unieke opdrachtnrs in een array reparaties
+  const uniekNrs = arr => new Set(arr.map(r => r.opdrachtnr)).size;
+
+  const codeRijen = alleCodes.map(code => {
+    const logsCode  = logsVandaag.filter(l => l.opdrachtcode === code);
+    const gedaan    = new Set(logsCode.map(l => l.opdrachtnr)).size;
+
+    const repsCode  = openReps.filter(r => r.opdrachtcode === code);
+    const totaalOpen = uniekNrs(repsCode);
+
+    if (!gedaan && !totaalOpen) return '';
+
+    const dlVandaag = uniekNrs(repsCode.filter(r =>
+      r.uiterste_datum_afdeling &&
+      new Date(r.uiterste_datum_afdeling) >= vandaag && new Date(r.uiterste_datum_afdeling) < morgen
+    ));
+    const dlVolgend = uniekNrs(repsCode.filter(r =>
+      r.uiterste_datum_afdeling &&
+      new Date(r.uiterste_datum_afdeling) >= volgDag && new Date(r.uiterste_datum_afdeling) < volgMorg
+    ));
+    const dlZeven = uniekNrs(repsCode.filter(r =>
+      r.uiterste_datum_afdeling &&
+      new Date(r.uiterste_datum_afdeling) >= vandaag && new Date(r.uiterste_datum_afdeling) < over7
+    ));
+
+    const gepland = dlVandaag + gedaan;
+    const pct = gepland > 0 ? Math.round((gedaan / gepland) * 100) : (gedaan > 0 ? 100 : 0);
+
+    const actief = msCode.has(code);
+    return `<tr onclick="dashToggleCode('${code.replace(/'/g, "\\'")}')" style="cursor:pointer${actief ? ';background:rgba(230,101,25,.08)' : ''}">
+      <td><span style="font-family:var(--mono);font-weight:600${actief ? ';color:var(--accent)' : ''}">${code}${actief ? ' ✓' : ''}</span></td>
+      <td class="r"><span class="dnum dnum-ok">${gedaan}</span></td>
+      <td class="r"><span class="dnum ${dlVandaag > 0 ? 'dnum-warn' : 'dnum-dim'}">${dlVandaag}</span></td>
+      <td class="r"><span class="dnum ${dlVolgend > 0 ? 'dnum-warn' : 'dnum-dim'}">${dlVolgend}</span></td>
+      <td class="r"><span class="dnum ${dlZeven > 0 ? 'dnum-warn' : 'dnum-dim'}">${dlZeven}</span></td>
+      <td class="r"><span class="dnum dnum-dim">${totaalOpen}</span></td>
+      <td><span class="dash-bar"><span class="dash-bar-fill" style="width:${pct}%"></span></span><span style="font-size:11px;color:var(--muted);margin-left:6px">${pct}%</span></td>
+      <td><button onclick="event.stopPropagation();dashInplannen('${code.replace(/'/g, "\\'")}')" style="background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:11px;font-family:var(--font);padding:4px 10px;cursor:pointer;white-space:nowrap">Inplannen</button></td>
+    </tr>`;
+  }).filter(Boolean).join('');
+
+  const totGedaan  = new Set(logsVandaag.map(l => l.opdrachtnr)).size;
+  const totVandaag = uniekNrs(openReps.filter(r =>
+    r.uiterste_datum_afdeling &&
+    new Date(r.uiterste_datum_afdeling) >= vandaag && new Date(r.uiterste_datum_afdeling) < morgen
+  ));
+
+  const codeKaart = document.createElement('div');
+  codeKaart.className = 'dash-sectie-kaart';
+  codeKaart.innerHTML = `
+    <div class="dash-sectie-header">
+      <div class="dash-sectie-titel">Per opdrachtcode</div>
+      <div class="dash-sectie-sub">${totGedaan} opdrachten gerepareerd &nbsp;·&nbsp; ${totVandaag} deadline vandaag</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="dash-code-tabel">
+        <thead><tr>
+          <th>Code</th>
+          <th class="r">${meerdagig ? 'Gerepareerd (periode)' : 'Gerepareerd'}</th>
+          <th class="r">Deadline vandaag</th>
+          <th class="r">Volgende werkdag</th>
+          <th class="r">Komende 7 dagen</th>
+          <th class="r">Totaal open</th>
+          <th>${meerdagig ? 'Voortgang periode' : 'Voortgang dag'}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${codeRijen || '<tr><td colspan="8" style="color:var(--muted);padding:14px 16px">Geen opdrachten</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  grid.appendChild(codeKaart);
+
+  // ── 2. Uurlijkse grafiek ─────────────────────────────────────────
+  const monteurKleurMap = {};
+  alleMonteurs.forEach((m, i) => { monteurKleurMap[String(m.id)] = KLEUR_PALET[i % KLEUR_PALET.length]; });
+
+  const grafiekKaart = document.createElement('div');
+  grafiekKaart.className = 'dash-sectie-kaart';
+
+  const monteursInData = [...new Set(logsVandaag.map(l => String(l.monteur_id || l.monteur_naam || '?')))];
+  const legendaHTML = monteursInData.length
+    ? monteursInData.map(id => {
+        const m = alleMonteurs.find(m => String(m.id) === id);
+        const kleur = monteurKleurMap[id] || '#888';
+        const actief = filterMont === id;
+        return `<div class="dash-legenda-item" style="cursor:pointer;opacity:${filterMont && !actief ? 0.4 : 1};${actief ? 'font-weight:600' : ''}" onclick="dashToggleMonteur('${id}')"><div class="dash-legenda-kleur" style="background:${kleur}"></div>${m?.naam || id}</div>`;
+      }).join('')
+    : '<span style="font-size:12px;color:var(--muted)">Geen data voor deze periode</span>';
+
+  // Alleen geselecteerde monteurs in de kaart meegeven
+  const grafiekLogsKleurMap = {};
+  monteursInData.forEach(id => { grafiekLogsKleurMap[id] = monteurKleurMap[id] || '#888'; });
+
+  const grafiekSVG   = maakUurGrafiekSVG(logsVandaag, grafiekLogsKleurMap, filterMont);
+  const grafiekTitel = 'Uurlijks verwerkt volume';
+
+  grafiekKaart.innerHTML = `
+    <div class="dash-sectie-header">
+      <div class="dash-sectie-titel">${grafiekTitel}</div>
+      <div class="dash-sectie-sub">${new Set(logsVandaag.map(l=>l.opdrachtnr)).size} opdrachten totaal</div>
+    </div>
+    <div class="dash-legenda">${legendaHTML}</div>
+    <div class="dash-grafiek-scroll">${grafiekSVG}</div>`;
+  grid.appendChild(grafiekKaart);
+
+  // ── 3. Per monteur mini-grid ─────────────────────────────────────
+  const monteurKaart = document.createElement('div');
+  monteurKaart.className = 'dash-sectie-kaart';
+  monteurKaart.innerHTML = '<div class="dash-sectie-header"><div class="dash-sectie-titel">Per monteur</div></div>';
+
+  const mgrid = document.createElement('div');
+  mgrid.className = 'dash-monteur-grid';
+
+  const zichtbaar = alleMonteurs.filter(m => !filterMont || String(m.id) === filterMont);
+  zichtbaar.forEach(m => {
+    const mLogs    = logsVandaag.filter(l => String(l.monteur_id) === String(m.id));
+    const mGedaan  = new Set(mLogs.map(l => l.opdrachtnr)).size;
+    const mDeadline = uniekNrs(alleReparaties.filter(r =>
+      r.monteur_id === m.id && String(r.status) !== '519' && matchCode(r) &&
+      r.uiterste_datum_afdeling &&
+      new Date(r.uiterste_datum_afdeling) >= vandaag && new Date(r.uiterste_datum_afdeling) < morgen
+    ));
+    const mOpen = uniekNrs(alleReparaties.filter(r =>
+      r.monteur_id === m.id && String(r.status) !== '519' && matchCode(r)
+    ));
+    const kleur = monteurKleurMap[String(m.id)] || '#888';
+
+    const cel = document.createElement('div');
+    cel.className = 'dash-mont-cel';
+    cel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${kleur};flex-shrink:0"></div>
+        <div class="dash-mont-naam">${m.naam}</div>
+      </div>
+      <div class="dash-mont-stats">
+        <div><div class="dash-mont-getal" style="color:var(--ok)">${mGedaan}</div><div class="dash-mont-label">Gedaan</div></div>
+        <div><div class="dash-mont-getal" style="color:${mDeadline > 0 ? 'var(--accent)' : 'var(--muted)'}">${mDeadline}</div><div class="dash-mont-label">Deadline</div></div>
+        <div><div class="dash-mont-getal">${mOpen}</div><div class="dash-mont-label">Open</div></div>
+      </div>`;
+    mgrid.appendChild(cel);
+  });
+
+  if (!zichtbaar.length) mgrid.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">Geen monteurs.</div>';
+  monteurKaart.appendChild(mgrid);
+  grid.appendChild(monteurKaart);
+
+}
+
+function parseerNotitie(notitie) {
+  if (!notitie) return { diagnose: '', werkzaamheden: '' };
+  const diagMatch = notitie.match(/Diagnose:\s*([\s\S]*?)(?:\n\nWerkzaamheden:|$)/);
+  const werkMatch = notitie.match(/Werkzaamheden:\s*([\s\S]*?)$/);
+  let werkzaamheden = werkMatch ? werkMatch[1].trim() : (!diagMatch ? notitie.trim() : '');
+  // Verwijder "Vragenlijst:\n..." uit bestaande logs (terugwerkende kracht in weergave)
+  werkzaamheden = werkzaamheden.replace(/\n\nVragenlijst:\n[\s\S]*$/, '').replace(/^Vragenlijst:\n[\s\S]*$/, '').trim();
+  return {
+    diagnose:      diagMatch ? diagMatch[1].trim() : '',
+    werkzaamheden,
+  };
+}
+
+function extractGroepAntwoorden(notitie) {
+  if (!notitie) return {};
+  const result = {};
+  const re = /^\[GROEP:(.+?)\]\s*(.*)$/gm;
+  let m;
+  while ((m = re.exec(notitie)) !== null) {
+    const vraag  = m[1].trim();
+    const opties = m[2].split('|').map(s => s.trim()).filter(Boolean);
+    if (!result[vraag]) result[vraag] = [];
+    result[vraag].push(...opties);
+  }
+  return result;
+}
+
+function afgerondOpdrachtKaartHTML(logs, monteurMap) {
+  const nr  = logs[0].opdrachtnr;
+  const uid = `afo-${nr}`.replace(/[^a-z0-9-]/gi, '_');
+
+  // Extra info vanuit alleReparaties
+  const repRegels      = alleReparaties.filter(r => r.opdrachtnr === nr);
+  const repHoofd       = repRegels[0] || {};
+  const opdrachtcode   = logs[0].opdrachtcode  || repHoofd.opdrachtcode  || '';
+  const opdrachtstatus = repHoofd.opdrachtstatus || '';
+  const organisatie    = repHoofd.organisatie    || '';
+  const klacht         = repHoofd.klacht         || '';
+
+  // Volledigheid bepalen via alleReparaties
+  const jRegels      = repRegels.filter(r => (r.doorsluizenjn||'').toUpperCase()==='J' && !isInstructieRegel(r));
+  const afgerondAantal = jRegels.filter(r => String(r.status) === '519').length;
+  const volledig     = jRegels.length > 0 && afgerondAantal === jRegels.length;
+  const gedeeltelijk = afgerondAantal > 0 && afgerondAantal < jRegels.length;
+
+  // Totale bestede tijd over alle monteurs
+  const totaalMin = logs.reduce((s, l) => s + (l.bestede_tijd_minuten || 0), 0);
+  const tijdLabel = totaalMin ? (() => {
+    const u = Math.floor(totaalMin / 60), m = totaalMin % 60;
+    return u > 0 ? `${u}u${m ? ' ' + String(m).padStart(2,'0') + 'm' : ''}` : `${m}m`;
+  })() : '';
+
+  // Badges
+  const badgesHTML = [
+    opdrachtcode   ? `<span class="afgerond-badge code">${esc(opdrachtcode)}</span>` : '',
+    opdrachtstatus ? `<span class="afgerond-badge">${esc(opdrachtstatus)}</span>` : '',
+    organisatie    ? `<span class="afgerond-badge org">${esc(organisatie)}</span>` : '',
+  ].filter(Boolean).join('');
+
+  // Completion badge
+  const completionBadge = volledig
+    ? `<span class="af-volledig-badge">✓ volledig (${afgerondAantal}/${jRegels.length})</span>`
+    : gedeeltelijk
+    ? `<span class="af-gedeeltelijk-badge">◑ ${afgerondAantal}/${jRegels.length} afgerond</span>`
+    : '';
+
+  // Samenvatting — platte tekst, copy-paste vriendelijk
+  const samenvattingTekst = logs.map(l => {
+    const isWp  = (l.artikelcode||'').toUpperCase() === '99-WERKPLAATS';
+    const titel = isWp
+      ? `🔧 ${l.apparaat_type || '99-WERKPLAATS'}`
+      : [l.artikelcode, l.apparaat_type].filter(Boolean).join(' · ') || '—';
+    const { diagnose, werkzaamheden } = parseerNotitie(l.notitie || '');
+    // Strip [GROEP:...] lines — die worden apart geaggregeerd onder de samenvatting
+    const werkClean = werkzaamheden.replace(/^\[GROEP:[^\]]*\].*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    const notitieLijnen = [
+      diagnose   ? `Probleem: ${diagnose}` : null,
+      werkClean  ? `Uitgevoerd: ${werkClean}` : null,
+      (!diagnose && !werkClean && l.notitie) ? l.notitie : null,
+    ].filter(Boolean);
+    return notitieLijnen.length ? `${titel}\n${notitieLijnen.join('\n')}` : titel;
+  }).join('\n\n');
+
+  // Gegroepeerde checkbox — aggregeer antwoorden over alle logs
+  const groepAggregaat = {};
+  logs.forEach(l => {
+    const ga = extractGroepAntwoorden(l.notitie || '');
+    for (const [vraag, opties] of Object.entries(ga)) {
+      if (!groepAggregaat[vraag]) groepAggregaat[vraag] = { tellingen: new Map(), aantalSom: 0 };
+      opties.forEach(o => groepAggregaat[vraag].tellingen.set(o, (groepAggregaat[vraag].tellingen.get(o) || 0) + 1));
+      groepAggregaat[vraag].aantalSom += (parseInt(l.aantal) || 0);
+    }
+  });
+  const groepSektie = Object.entries(groepAggregaat).map(([vraag, { tellingen, aantalSom }]) => {
+    const rijen = [...tellingen.entries()].map(([o, n]) => `${o}: ${n}×`).join(' | ');
+    return `📊 ${vraag}${aantalSom ? ` · ${aantalSom} stuks` : ''}\n${rijen}`;
+  }).join('\n\n');
+  const samenvattingVolledig = samenvattingTekst + (groepSektie ? '\n\n' + groepSektie : '');
+
+  // Per-regel lijst — elk log-item met artikel, notitie en monteur
+  const regelRijen = logs.map(l => {
+    const isWp    = (l.artikelcode||'').toUpperCase() === '99-WERKPLAATS';
+    const code    = isWp ? null : l.artikelcode;
+    const sub     = l.apparaat_type || '';
+    const label   = isWp ? (sub || '99-WERKPLAATS') : (code || sub || '—');
+    const mont    = monteurMap[l.monteur_id];
+    const mNaam   = l.monteur_naam || mont?.naam || '';
+    const mIni    = mont?.initialen || (mNaam||'?').slice(0,2).toUpperCase();
+    const lMin    = l.bestede_tijd_minuten || 0;
+    const lTijd   = lMin ? (() => {
+      const u = Math.floor(lMin/60), m = lMin%60;
+      return u > 0 ? `${u}u${m ? ' '+String(m).padStart(2,'0')+'m' : ''}` : `${m}m`;
+    })() : '';
+
+    const { diagnose, werkzaamheden } = parseerNotitie(l.notitie || '');
+    const notitieWrap = (diagnose || werkzaamheden) ? `
+      <div class="af-notitie-wrapper">
+        ${diagnose     ? `<div class="af-notitie-blok"><div class="af-notitie-label">Probleem</div>${esc(diagnose)}</div>` : ''}
+        ${werkzaamheden ? `<div class="af-notitie-blok"><div class="af-notitie-label">Uitgevoerd</div>${esc(werkzaamheden)}</div>` : ''}
+      </div>` : l.notitie ? `
+      <div class="af-notitie-wrapper">
+        <div class="af-notitie-blok">${esc(l.notitie)}</div>
+      </div>` : `<span class="af-geen-notitie">geen notitie</span>`;
+
+    return `<div class="af-regel-rij">
+      <div class="af-regel-top">
+        <div class="af-regel-ident">
+          ${isWp ? `<span style="font-size:11px;color:var(--muted)">🔧</span>` : ''}
+          <span class="af-regel-code">${esc(label)}</span>
+          ${!isWp && sub ? `<span class="af-regel-type">${esc(sub)}</span>` : ''}
+          ${!isWp && l.aantal != null ? `<span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0">${l.aantal}×</span>` : ''}
+        </div>
+        <div class="af-monteur-inline">
+          <div class="af-monteur-avatar">${esc(mIni)}</div>
+          ${mNaam ? `<span>${esc(mNaam)}</span>` : ''}
+          ${lTijd ? `<span style="font-family:var(--mono)">⏱ ${lTijd}</span>` : ''}
+        </div>
+      </div>
+      ${notitieWrap}
+    </div>`;
+  }).join('');
+
+  const regelLijstHTML = `<div class="af-regel-lijst">${regelRijen}</div>`;
+
+  // Opmerking toggle (klantklacht vanuit reparaties)
+  const opmSectieHTML = klacht ? `
+    <div class="afgerond-extra-sectie" id="opm-sectie-${uid}" style="display:none">
+      <div class="afgerond-extra-label">Klantklacht</div>
+      <div style="font-size:12px;line-height:1.5">${esc(klacht)}</div>
+    </div>` : '';
+
+  // Icon knoppen
+  const iconKnoppen = [
+    klacht ? `<button class="groep-icon-btn" id="opm-btn-${uid}" title="Klantklacht" onclick="toggleGroepSectie('opm-sectie-${uid}','opm-btn-${uid}')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>` : '',
+    `<button class="groep-icon-btn" title="Beschikbaar stellen" onclick="heropendOpdracht('${esc(nr)}')" style="color:var(--info)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+    </button>`,
+  ].filter(Boolean).join('');
+
+  // Monteur breakdown — per monteur: naam, tijd, regelcount
+  const perMonteur = {};
+  logs.forEach(l => {
+    const key  = l.monteur_id || l.monteur_naam || 'onbekend';
+    const mont = monteurMap[l.monteur_id];
+    const naam = l.monteur_naam || mont?.naam || 'Onbekend';
+    const ini  = mont?.initialen || (naam||'?').slice(0,2).toUpperCase();
+    if (!perMonteur[key]) perMonteur[key] = { naam, ini, min: 0, regels: 0 };
+    perMonteur[key].min    += l.bestede_tijd_minuten || 0;
+    perMonteur[key].regels += 1;
+  });
+  const monteurChips = Object.values(perMonteur).map(({ naam, ini, min, regels }) => {
+    const mTijd = min ? (() => {
+      const u = Math.floor(min/60), m = min%60;
+      return u > 0 ? `${u}u${m ? ' '+String(m).padStart(2,'0')+'m' : ''}` : `${m}m`;
+    })() : '';
+    return `<div class="af-monteur-chip">
+      <div class="af-monteur-avatar">${esc(ini)}</div>
+      <span style="font-weight:500;color:var(--text)">${esc(naam)}</span>
+      ${mTijd ? `<span style="color:var(--muted);font-family:var(--mono)">⏱ ${mTijd}</span>` : ''}
+      <span style="color:var(--muted)">${regels} regel${regels !== 1 ? 's' : ''}</span>
+    </div>`;
+  }).join('');
+
+  const borderStyle = volledig ? 'border-left:3px solid var(--ok)' : gedeeltelijk ? 'border-left:3px solid #e66519' : '';
+
+  return `
+    <div class="af-opdracht-kaart" style="${borderStyle}">
+      <div class="af-opdracht-header">
+        <div class="af-opdracht-nrblok">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="af-opdracht-nr">${esc(nr)}</span>
+            ${completionBadge}
+          </div>
+          ${badgesHTML ? `<div class="afgerond-badges" style="margin-top:2px">${badgesHTML}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          ${tijdLabel ? `<span style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text)">⏱ ${tijdLabel}</span>` : ''}
+          ${iconKnoppen}
+          <button class="groep-icon-btn" id="af-chv-${uid}" title="Uitklappen" onclick="toggleAfDetail('${uid}')" style="transition:transform .2s">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      ${opmSectieHTML}
+      <div class="af-samenvatting" id="af-sv-${uid}">${esc(samenvattingVolledig)}</div>
+      <div id="af-det-${uid}" style="display:none">
+        ${regelLijstHTML}
+        <div class="af-monteur-rij">${monteurChips}</div>
+      </div>
+    </div>`;
+}
+
+
+function resetAfgerondDatum() {
+  const vandaag = new Date().toISOString().slice(0, 10);
+  const van = document.getElementById('afgerond-van');
+  const tm  = document.getElementById('afgerond-tm');
+  if (van) van.value = vandaag;
+  if (tm)  tm.value  = vandaag;
+  renderOpdrachten();
+}
+
+async function renderAfgerond() {
+  const container = document.getElementById('afgerond-content');
+  container.innerHTML = '<div style="color:var(--muted);font-size:13px;">Laden...</div>';
+
+  // Periode bepalen (standaard vandaag)
+  const vandaagStr = new Date().toISOString().slice(0, 10);
+  const vanEl = document.getElementById('afgerond-van');
+  const tmEl  = document.getElementById('afgerond-tm');
+  if (vanEl && !vanEl.value) vanEl.value = vandaagStr;
+  if (tmEl  && !tmEl.value)  tmEl.value  = vandaagStr;
+  const vandaag = new Date((vanEl?.value || vandaagStr) + 'T00:00:00');
+  const tmDatum = new Date((tmEl?.value  || vandaagStr) + 'T00:00:00');
+  const morgen  = new Date(tmDatum); morgen.setDate(morgen.getDate() + 1);
+
+  const monteurMap = {};
+  alleMonteurs.forEach(m => { monteurMap[m.id] = m; });
+
+  // Stap 1: welke opdrachtnrs hebben een log binnen de periode?
+  const { data: logsInPeriode } = await sb.from('reparatie_logs')
+    .select('opdrachtnr')
+    .eq('actie', 'afgerond')
+    .gte('aangemaakt_op', vandaag.toISOString())
+    .lt('aangemaakt_op', morgen.toISOString());
+
+  let bronItems = [];
+
+  const nrsInPeriode = [...new Set((logsInPeriode || []).map(l => l.opdrachtnr).filter(Boolean))];
+
+  if (nrsInPeriode.length) {
+    // Stap 2: laad ALLE logs voor die opdrachtnrs (ook regels van andere dagen)
+    const { data: volledigeLogs } = await sb.from('reparatie_logs')
+      .select('id, opdrachtnr, opdrachtcode, monteur_id, monteur_naam, artikelcode, apparaat_type, aantal, notitie, aangemaakt_op, bestede_tijd_minuten')
+      .eq('actie', 'afgerond')
+      .in('opdrachtnr', nrsInPeriode)
+      .order('aangemaakt_op', { ascending: false });
+    bronItems = volledigeLogs || [];
+  } else {
+    // Fallback: reparaties met status 519 en afgerond_op vandaag
+    const vandaagISO = vandaag.toISOString();
+    const morgenISO  = morgen.toISOString();
+    bronItems = alleReparaties.filter(r =>
+      String(r.status) === '519' && r.afgerond_op &&
+      r.afgerond_op >= vandaagISO && r.afgerond_op < morgenISO
+    );
+  }
+
+  // Lookup map for reparatie fields (landcode, handeling etc.) by opdrachtnr
+  const repLookup = {};
+  alleReparaties.forEach(r => { if (r.opdrachtnr) repLookup[r.opdrachtnr] = r; });
+
+  // Filter orders zonder J-regel.
+  // Primaire check via alleReparaties; fallback via de log zelf (voor orders ouder dan de 2000-limit).
+  const geldigeNrs = _geldigeOpdrachten();
+  const logGeldigeNrs = new Set(
+    bronItems
+      .filter(l => l.artikelcode && (l.artikelcode||'').toUpperCase() !== '99-WERKPLAATS')
+      .map(l => l.opdrachtnr)
+  );
+  bronItems = bronItems.filter(item => geldigeNrs.has(item.opdrachtnr) || logGeldigeNrs.has(item.opdrachtnr));
+
+  // Groepeer per opdrachtnr (primair)
+  const perOpdracht = {};
+  bronItems.forEach(item => {
+    if (!perOpdracht[item.opdrachtnr]) perOpdracht[item.opdrachtnr] = [];
+    perOpdracht[item.opdrachtnr].push(item);
+  });
+
+  // Filters op opdrachtniveau toepassen
+  const afZoek    = (document.getElementById('af-filter-zoek')?.value || '').trim().toLowerCase();
+  const afCode    = leesMultiSelect('af-ms-opdrachtcode');
+  const afStatus  = leesMultiSelect('af-ms-opdrachtstatus');
+  const afLand    = leesMultiSelect('af-ms-landcode');
+  const afOrg     = leesMultiSelect('af-ms-organisatie');
+  const afMonteur = leesMultiSelect('af-ms-monteur');
+
+  let groepen = Object.values(perOpdracht);
+  if (afZoek || afCode.size || afStatus.size || afLand.size || afOrg.size || afMonteur.size) {
+    groepen = groepen.filter(logs => {
+      const nr  = logs[0].opdrachtnr;
+      const rep = repLookup[nr] || logs[0];
+      if (afZoek    && !String(nr).toLowerCase().includes(afZoek))                            return false;
+      if (afCode.size   && !afCode.has(logs[0].opdrachtcode || rep.opdrachtcode || ''))       return false;
+      if (afStatus.size && !afStatus.has(rep.opdrachtstatus || ''))                           return false;
+      if (afLand.size   && !afLand.has(rep.landcode || ''))                                   return false;
+      if (afOrg.size    && !afOrg.has(rep.organisatie || ''))                                 return false;
+      if (afMonteur.size && !logs.some(l => afMonteur.has(l.monteur_naam || monteurMap[l.monteur_id]?.naam || ''))) return false;
+      return true;
+    });
+  }
+
+  const fmt = d => d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long', year: 'numeric' });
+  const periodeLabel = vandaag.toDateString() === tmDatum.toDateString()
+    ? fmt(vandaag)
+    : `${fmt(vandaag)} t/m ${fmt(tmDatum)}`;
+  if (!groepen.length) {
+    container.innerHTML = `<div class="afgerond-leeg">Geen afgeronde opdrachten in de periode ${periodeLabel}.</div>`;
+    return;
+  }
+
+  // Sorteer op meest recente log
+  groepen.sort((a, b) => new Date(b[0].aangemaakt_op) - new Date(a[0].aangemaakt_op));
+
+  container.innerHTML = groepen.map(logs => afgerondOpdrachtKaartHTML(logs, monteurMap)).join('');
+}
+
+// ── OPDRACHTEN TAB ────────────────────────────────────────────────
+
+function setOpdrachtFilter(f) {
+  _opdrachtStatusFilter = f;
+  ['alle','open','geclaimd','onderdelen','afgerond'].forEach(key => {
+    const btn = document.getElementById('sf-' + key);
+    if (btn) btn.classList.toggle('actief', key === f);
+  });
+  renderOpdrachten();
+}
+
+function toggleOcDetail(uid) {
+  const body = document.getElementById('oc-body-' + uid);
+  const chv  = document.getElementById('oc-chv-' + uid);
+  if (!body) return;
+  const open = body.style.display !== 'block';
+  body.style.display = open ? 'block' : 'none';
+  if (chv) chv.style.transform = open ? 'rotate(90deg)' : '';
+}
+
+function maakOpenGeclaimdKaartHTML(regels, nr, statusType, monteurMap, repLookup) {
+  const uid = ('oc-' + nr).replace(/[^a-z0-9-]/gi, '_');
+  const rep = repLookup[nr] || regels[0] || {};
+
+  const opdrachtcode   = regels[0]?.opdrachtcode || rep.opdrachtcode   || '';
+  const opdrachtstatus = rep.opdrachtstatus || '';
+  const organisatie    = rep.organisatie    || '';
+  const klacht         = rep.klacht         || '';
+
+  const statCls   = statusType === 'open' ? 'oc-stat-open'
+                  : statusType === 'onderdelen' ? 'oc-stat-ond'
+                  : 'oc-stat-claim';
+  const statTxt   = statusType === 'open' ? 'Openstaand'
+                  : statusType === 'onderdelen' ? 'Onderdelen besteld'
+                  : 'Geclaimd';
+  const borderClr = statusType === 'open' ? 'var(--danger)'
+                  : statusType === 'onderdelen' ? '#2563eb'
+                  : 'var(--accent)';
+
+  const dl = deadlineInfo(rep);
+  const deadlineHTML = dl && dl.kleur
+    ? `<span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${dl.kleur};border:1px solid ${dl.kleur};border-radius:3px;padding:2px 5px">⏱ ${dl.label} · ${dl.datumStr}</span>`
+    : dl ? `<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${dl.datumStr}</span>` : '';
+
+  const badgesHTML = [
+    opdrachtcode   ? `<span class="mgr-opdrachtcode">${esc(opdrachtcode)}</span>` : '',
+    opdrachtstatus ? `<span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 7px">${esc(opdrachtstatus)}</span>` : '',
+    organisatie    ? `<span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 7px">${esc(organisatie)}</span>` : '',
+  ].filter(Boolean).join('');
+
+  const regelRijen = regels.map(r => {
+    const isWp  = (r.artikelcode||'').toUpperCase() === '99-WERKPLAATS';
+    const label = isWp ? (r.apparaat_type || '99-WERKPLAATS') : (r.artikelcode || r.apparaat_type || '—');
+    const sub   = !isWp ? (r.apparaat_type || '') : '';
+    const mont  = monteurMap[r.monteur_id];
+    const mNaam = r.monteur_naam || mont?.naam || '';
+    const st    = String(r.status);
+    const afg   = st === '519';
+    const claim = st === '465';
+    const ond   = st === '480';
+
+    const rowStyle = afg   ? 'cursor:default;border-left:2px solid var(--ok);opacity:.6'
+                   : claim ? 'cursor:default;border-left:2px solid var(--accent)'
+                   : ond   ? 'cursor:default;border-left:2px solid #2563eb'
+                   :         'cursor:default';
+
+    const statusEl = afg
+      ? `<span style="font-size:10px;color:var(--ok);font-family:var(--mono);flex-shrink:0">✓ afgerond</span>`
+      : (claim && mNaam)
+      ? `<span class="mgr-regel-bezet">${esc(mNaam)}</span>`
+      : ond
+      ? `<span style="font-size:10px;color:#2563eb;font-family:var(--mono);flex-shrink:0">📦 onderdelen</span>`
+      : '';
+
+    return `<div class="mgr-regel-rij" style="${rowStyle}">
+      <div class="mgr-regel-info">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="min-width:0">
+            ${isWp
+              ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🔧 ${esc(label)}</div>`
+              : `<div style="font-size:12px;font-weight:600;font-family:var(--mono);color:${afg ? 'var(--muted)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div>`}
+            ${!isWp && sub ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sub)}</div>` : ''}
+          </div>
+          ${!isWp && r.aantal != null ? `<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--muted);flex-shrink:0">${r.aantal}×</span>` : ''}
+        </div>
+      </div>
+      ${statusEl}
+    </div>`;
+  }).join('');
+
+  const klachtSectieHTML = klacht ? `
+    <div class="groep-extra-sectie" id="oc-klacht-${uid}" style="display:none">
+      <div class="groep-extra-label">Klantklacht</div>
+      <div style="font-size:12px;line-height:1.5">${esc(klacht)}</div>
+    </div>` : '';
+
+  const klachtBtnHTML = klacht ? `
+    <button class="groep-icon-btn" id="oc-klacht-btn-${uid}" title="Klantklacht"
+      onclick="toggleGroepSectie('oc-klacht-${uid}','oc-klacht-btn-${uid}')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>` : '';
+
+  return `
+    <div class="oc-kaart" style="border-left:3px solid ${borderClr}">
+      <div class="oc-kaart-header" style="cursor:default">
+        <span class="kaart-nr">${esc(nr)}</span>
+        ${badgesHTML}
+        ${deadlineHTML}
+        <span class="${statCls}" style="margin-left:auto">${statTxt}</span>
+        ${klachtBtnHTML}
+      </div>
+      ${klachtSectieHTML}
+      <div class="groep-regels">
+        ${regelRijen}
+      </div>
+    </div>`;
+}
+
+async function renderOpdrachten() {
+  const container = document.getElementById('afgerond-content');
+  container.innerHTML = '<div style="color:var(--muted);font-size:13px;">Laden...</div>';
+
+  const vandaagStr = new Date().toISOString().slice(0, 10);
+  const vanEl = document.getElementById('afgerond-van');
+  const tmEl  = document.getElementById('afgerond-tm');
+  if (vanEl && !vanEl.value) vanEl.value = vandaagStr;
+  if (tmEl  && !tmEl.value)  tmEl.value  = vandaagStr;
+  const vandaag = new Date((vanEl?.value || vandaagStr) + 'T00:00:00');
+  const tmDatum = new Date((tmEl?.value  || vandaagStr) + 'T00:00:00');
+  const morgen  = new Date(tmDatum); morgen.setDate(morgen.getDate() + 1);
+
+  const monteurMap = {};
+  alleMonteurs.forEach(m => { monteurMap[m.id] = m; });
+
+  const afZoek    = (document.getElementById('af-filter-zoek')?.value || '').trim().toLowerCase();
+  const afCode    = leesMultiSelect('af-ms-opdrachtcode');
+  const afStatus  = leesMultiSelect('af-ms-opdrachtstatus');
+  const afLand    = leesMultiSelect('af-ms-landcode');
+  const afOrg     = leesMultiSelect('af-ms-organisatie');
+  const afMonteur = leesMultiSelect('af-ms-monteur');
+
+  const geldigeNrs = _geldigeOpdrachten();
+  const repLookup  = {};
+  alleReparaties.forEach(r => { if (r.opdrachtnr) repLookup[r.opdrachtnr] = repLookup[r.opdrachtnr] || r; });
+
+  // Groepeer J-regels per opdrachtnr
+  const perOpdracht = {};
+  alleReparaties.forEach(r => {
+    if (!r.opdrachtnr || !geldigeNrs.has(r.opdrachtnr)) return;
+    if (isInstructieRegel(r)) return;
+    if ((r.doorsluizenjn || '').toUpperCase() !== 'J') return;
+    if (!perOpdracht[r.opdrachtnr]) perOpdracht[r.opdrachtnr] = [];
+    perOpdracht[r.opdrachtnr].push(r);
+  });
+
+  const openGroepen        = [];
+  const geclaimdGroepen    = [];
+  const onderdelenGroepen  = [];
+
+  Object.entries(perOpdracht).forEach(([nr, regels]) => {
+    const statussen    = regels.map(r => String(r.status));
+    const alleAfgerond = statussen.every(s => s === '519');
+    const heeftClaim   = statussen.some(s => s === '465');
+    const heeftOnd     = statussen.some(s => s === '480');
+    if (alleAfgerond) return; // valt in afgerond-sectie via log-query
+    if (heeftClaim)       geclaimdGroepen.push({ nr, regels });
+    else if (heeftOnd)    onderdelenGroepen.push({ nr, regels });
+    else                  openGroepen.push({ nr, regels });
+  });
+
+  function filterGroep(groepen) {
+    return groepen.filter(({ nr, regels }) => {
+      const rep = repLookup[nr] || regels[0] || {};
+      if (afZoek      && !String(nr).toLowerCase().includes(afZoek))                          return false;
+      if (afCode.size  && !afCode.has(regels[0]?.opdrachtcode || rep.opdrachtcode || ''))     return false;
+      if (afStatus.size && !afStatus.has(rep.opdrachtstatus || ''))                           return false;
+      if (afLand.size  && !afLand.has(rep.landcode || ''))                                    return false;
+      if (afOrg.size   && !afOrg.has(rep.organisatie || ''))                                  return false;
+      if (afMonteur.size && !regels.some(r => {
+        const m = monteurMap[r.monteur_id];
+        return afMonteur.has(r.monteur_naam || m?.naam || '');
+      })) return false;
+      return true;
+    });
+  }
+
+  const filteredOpen        = filterGroep(openGroepen);
+  const filteredGeclaimd    = filterGroep(geclaimdGroepen);
+  const filteredOnderdelen  = filterGroep(onderdelenGroepen);
+
+  // ─── Afgerond (twee-staps log-query) ───
+  const { data: logsInPeriode } = await sb.from('reparatie_logs')
+    .select('opdrachtnr')
+    .eq('actie', 'afgerond')
+    .gte('aangemaakt_op', vandaag.toISOString())
+    .lt('aangemaakt_op', morgen.toISOString());
+
+  let afgerondLogs = [];
+  const nrsInPeriode = [...new Set((logsInPeriode || []).map(l => l.opdrachtnr).filter(Boolean))];
+  if (nrsInPeriode.length) {
+    const { data: volledigeLogs } = await sb.from('reparatie_logs')
+      .select('id, opdrachtnr, opdrachtcode, monteur_id, monteur_naam, artikelcode, apparaat_type, aantal, notitie, aangemaakt_op, bestede_tijd_minuten')
+      .eq('actie', 'afgerond')
+      .in('opdrachtnr', nrsInPeriode)
+      .order('aangemaakt_op', { ascending: false });
+    afgerondLogs = volledigeLogs || [];
+  }
+
+  const logGeldigeNrs = new Set(
+    afgerondLogs
+      .filter(l => l.artikelcode && (l.artikelcode||'').toUpperCase() !== '99-WERKPLAATS')
+      .map(l => l.opdrachtnr)
+  );
+  afgerondLogs = afgerondLogs.filter(l => geldigeNrs.has(l.opdrachtnr) || logGeldigeNrs.has(l.opdrachtnr));
+
+  const perAfgerond = {};
+  afgerondLogs.forEach(l => {
+    if (!perAfgerond[l.opdrachtnr]) perAfgerond[l.opdrachtnr] = [];
+    perAfgerond[l.opdrachtnr].push(l);
+  });
+
+  let afgerondGroepen = Object.values(perAfgerond);
+  afgerondGroepen = afgerondGroepen.filter(logs => {
+    const nr  = logs[0].opdrachtnr;
+    const rep = repLookup[nr] || logs[0];
+    if (afZoek      && !String(nr).toLowerCase().includes(afZoek))                            return false;
+    if (afCode.size  && !afCode.has(logs[0].opdrachtcode || rep.opdrachtcode || ''))          return false;
+    if (afStatus.size && !afStatus.has(rep.opdrachtstatus || ''))                             return false;
+    if (afLand.size  && !afLand.has(rep.landcode || ''))                                      return false;
+    if (afOrg.size   && !afOrg.has(rep.organisatie || ''))                                    return false;
+    if (afMonteur.size && !logs.some(l => afMonteur.has(l.monteur_naam || monteurMap[l.monteur_id]?.naam || ''))) return false;
+    return true;
+  });
+  afgerondGroepen.sort((a, b) => new Date(b[0].aangemaakt_op) - new Date(a[0].aangemaakt_op));
+
+  const sf              = _opdrachtStatusFilter;
+  const showOpen        = sf === 'alle' || sf === 'open';
+  const showGeclaimd    = sf === 'alle' || sf === 'geclaimd';
+  const showOnderdelen  = sf === 'alle' || sf === 'onderdelen';
+  const showAfgerond    = sf === 'alle' || sf === 'afgerond';
+
+  const fmt = d => d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long', year: 'numeric' });
+  const periodeLabel = vandaag.toDateString() === tmDatum.toDateString()
+    ? fmt(vandaag)
+    : `${fmt(vandaag)} t/m ${fmt(tmDatum)}`;
+
+  let html = '';
+
+  if (showOpen) {
+    html += `<div class="opdracht-sectie">
+      <div class="opdracht-sectie-header">
+        <div class="oc-dot" style="background:var(--danger)"></div>
+        <span class="oc-titel">Openstaand</span>
+        <span class="oc-tel">${filteredOpen.length}</span>
+      </div>
+      ${filteredOpen.length
+        ? filteredOpen.map(({ nr, regels }) => maakOpenGeclaimdKaartHTML(regels, nr, 'open', monteurMap, repLookup)).join('')
+        : '<div style="font-size:12px;color:var(--muted);padding:4px 0">Geen openstaande opdrachten.</div>'}
+    </div>`;
+  }
+
+  if (showGeclaimd) {
+    html += `<div class="opdracht-sectie">
+      <div class="opdracht-sectie-header">
+        <div class="oc-dot" style="background:var(--accent)"></div>
+        <span class="oc-titel">Geclaimd</span>
+        <span class="oc-tel">${filteredGeclaimd.length}</span>
+      </div>
+      ${filteredGeclaimd.length
+        ? filteredGeclaimd.map(({ nr, regels }) => maakOpenGeclaimdKaartHTML(regels, nr, 'geclaimd', monteurMap, repLookup)).join('')
+        : '<div style="font-size:12px;color:var(--muted);padding:4px 0">Geen geclaimde opdrachten.</div>'}
+    </div>`;
+  }
+
+  if (showOnderdelen) {
+    html += `<div class="opdracht-sectie">
+      <div class="opdracht-sectie-header">
+        <div class="oc-dot" style="background:#2563eb"></div>
+        <span class="oc-titel">Onderdelen besteld</span>
+        <span class="oc-tel">${filteredOnderdelen.length}</span>
+      </div>
+      ${filteredOnderdelen.length
+        ? filteredOnderdelen.map(({ nr, regels }) => maakOpenGeclaimdKaartHTML(regels, nr, 'onderdelen', monteurMap, repLookup)).join('')
+        : '<div style="font-size:12px;color:var(--muted);padding:4px 0">Geen opdrachten wachten op onderdelen.</div>'}
+    </div>`;
+  }
+
+  if (showAfgerond) {
+    html += `<div class="opdracht-sectie">
+      <div class="opdracht-sectie-header">
+        <div class="oc-dot" style="background:var(--ok)"></div>
+        <span class="oc-titel">Afgerond</span>
+        <span class="oc-tel">${afgerondGroepen.length}</span>
+        <span style="font-size:11px;color:var(--muted)">${esc(periodeLabel)}</span>
+      </div>
+      ${afgerondGroepen.length
+        ? afgerondGroepen.map(logs => afgerondOpdrachtKaartHTML(logs, monteurMap)).join('')
+        : `<div style="font-size:12px;color:var(--muted);padding:4px 0">Geen afgeronde opdrachten in de periode ${esc(periodeLabel)}.</div>`}
+    </div>`;
+  }
+
+  container.innerHTML = html || '<div class="afgerond-leeg">Geen opdrachten gevonden.</div>';
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── GEBRUIKERS ZICHTBAARHEID ──────────────────────────────────────
+const GB_VERBORGEN_KEY = 'mgr_verborgen_gebruikers';
+
+function alleVerborgenIds() {
+  try { return JSON.parse(localStorage.getItem(GB_VERBORGEN_KEY)) || []; }
+  catch { return []; }
+}
+
+function slaVerborgenOp(ids) {
+  localStorage.setItem(GB_VERBORGEN_KEY, JSON.stringify(ids));
+}
+
+function verbergGebruiker(id) {
+  sluitAlleMenus();
+  const ids = alleVerborgenIds();
+  if (!ids.includes(id)) ids.push(id);
+  slaVerborgenOp(ids);
+  renderBoard();
+}
+
+function herstelGebruiker(id) {
+  const ids = alleVerborgenIds().filter(x => x !== id);
+  slaVerborgenOp(ids);
+  renderBoard();
+}
+
+function toggleGbMenu(id) {
+  const panel = document.getElementById('gb-menu-' + id);
+  const wasOpen = panel.classList.contains('open');
+  sluitAlleMenus();
+  if (!wasOpen) panel.classList.add('open');
+}
+
+function toggleGbHerstelPanel() {
+  const panel = document.getElementById('gb-herstel-panel');
+  if (!panel) return;
+  const wasOpen = panel.classList.contains('open');
+  sluitAlleMenus();
+  if (!wasOpen) panel.classList.add('open');
+}
+
+function sluitAlleMenus() {
+  document.querySelectorAll('.gb-verborgen-panel.open').forEach(p => p.classList.remove('open'));
+}
+// ─────────────────────────────────────────────────────────────────
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.monteur-menu-btn') && !e.target.closest('.gb-verborgen-panel') &&
+      !e.target.closest('.gb-plus-btn')) {
+    sluitAlleMenus();
+  }
+});
+
+// ── INIT ──────────────────────────────────────────────────────────
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) {
+    await laadNaInlog(session.user);
+  }
+})();
+</script>
+</body>
+</html>

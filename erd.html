@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>ERD — Strijbosch Werkplaats</title>
+<style>
+  body { font-family: monospace; background: #f0f4f8; color: #001e3c; padding: 32px; line-height: 1.6; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  p.sub { color: #5a7a9a; font-size: 12px; margin-bottom: 32px; }
+  h2 { font-size: 13px; color: #004582; margin: 28px 0 6px; text-transform: uppercase; letter-spacing: .08em; }
+  pre { background: #fff; border: 1px solid #c8d8e8; border-radius: 6px; padding: 16px 20px; font-size: 12px; line-height: 1.7; overflow-x: auto; }
+  .pk  { color: #ec6500; font-weight: bold; }
+  .fk  { color: #004582; font-weight: bold; }
+  .idx { color: #1a8f4f; }
+</style>
+</head>
+<body>
+
+<h1>ERD — Strijbosch Werkplaats App</h1>
+<p class="sub">Supabase / PostgreSQL · tekstueel overzicht</p>
+
+<h2>Kern</h2>
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│ monteurs                                                    │
+├─────────────────────────────────────────────────────────────┤
+│ <span class="pk">id              uuid        PK</span>                               │
+│ auth_user_id    uuid        UNIQUE (→ Supabase Auth)        │
+│ naam            text                                        │
+│ initialen       text                                        │
+│ email           text                                        │
+│ rol             text        (monteur / manager / admin)     │
+│ actief          boolean                                     │
+│ aangemaakt_op   timestamptz                                 │
+└─────────────────────────────────────────────────────────────┘
+         │
+         │ monteur_id (FK)
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ reparaties                              ← ERP sync          │
+├─────────────────────────────────────────────────────────────┤
+│ <span class="pk">id                   uuid        PK</span>                          │
+│ <span class="idx">opdrachtnr           text        UNIQUE samen met regelnummer</span> │
+│ <span class="idx">regelnummer          integer     UNIQUE samen met opdrachtnr</span>  │
+│ opdrachtcode        text                                    │
+│ betalercode         text                                    │
+│ abonneecode         text                                    │
+│ artikelcode         text                                    │
+│ apparaat_type       text                                    │
+│ merk                text                                    │
+│ model               text                                    │
+│ serienummer         text                                    │
+│ tagnummer           text                                    │
+│ klacht              text                                    │
+│ handeling           text                                    │
+│ werkplaats          text                                    │
+│ status              text        (445 / 465 / 519)          │
+│ opdrachtstatus      text        (uit ERP)                   │
+│ prioriteit          text                                    │
+│ soort               text        (normaal / voorraad)        │
+│ aantal              integer                                 │
+│ doorsluizenjn       text        (J / N)                    │
+│ <span class="fk">monteur_id           uuid        FK → monteurs</span>              │
+│ toegewezen_door     text        (manager / monteur)         │
+│ aangemaakt_op       timestamptz                             │
+│ in_behandeling_op   timestamptz                             │
+│ afgerond_op         timestamptz                             │
+│ uiterste_datum_afdeling  date                              │
+│ klant_naam          text                                    │
+│ klant_nummer        text                                    │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ├──────────────────────────────────────────────────────┐
+         │ reparatie_id (FK)                                    │ reparatie_id (FK)
+         ▼                                                      ▼
+┌───────────────────────────────────┐   ┌──────────────────────────────────┐
+│ reparatie_logs                    │   │ inkooporders                     │
+├───────────────────────────────────┤   ├──────────────────────────────────┤
+│ <span class="pk">id                   uuid  PK</span>    │   │ <span class="pk">id               uuid  PK</span>         │
+│ <span class="fk">reparatie_id         uuid  FK?</span>   │   │ <span class="fk">reparatie_id     uuid  FK</span>          │
+│ <span class="fk">monteur_id           uuid  FK?</span>   │   │ <span class="fk">onderdeel_id     uuid  FK</span>          │
+│ monteur_naam        text          │   │ <span class="fk">monteur_id       uuid  FK?</span>         │
+│ opdrachtnr          text          │   │ aantal          integer           │
+│ artikelcode         text          │   │ status          text              │
+│ apparaat_type       text          │   │ aangemaakt_op   timestamptz       │
+│ actie               text          │   │ afgehandeld_op  timestamptz       │
+│ notitie             text          │   └──────────────┬───────────────────┘
+│ gebruikte_onderdelen text         │                  │ onderdeel_id (FK)
+│ bestede_tijd_minuten integer      │                  ▼
+│ serienummer         text          │   ┌──────────────────────────────────┐
+│ tagnummer           text          │   │ onderdelen                       │
+│ aantal              text          │   ├──────────────────────────────────┤
+│ aangemaakt_op       timestamptz   │   │ <span class="pk">id               uuid  PK</span>         │
+└───────────────────────────────────┘   │ naam            text             │
+                                        │ artikelnr       text             │
+                                        │ voorraad_aantal integer          │
+                                        │ min_voorraad    integer          │
+                                        │ prijs           numeric          │
+                                        │ aangemaakt_op   timestamptz      │
+                                        └──────────────┬───────────────────┘
+                                                       │ onderdeel_id (FK)
+                                                       ▼
+                                        ┌──────────────────────────────────┐
+                                        │ voorraad_taken                   │
+                                        ├──────────────────────────────────┤
+                                        │ <span class="pk">id               uuid  PK</span>         │
+                                        │ <span class="fk">onderdeel_id     uuid  FK</span>          │
+                                        │ <span class="fk">monteur_id       uuid  FK</span>          │
+                                        │ status          text             │
+                                        │ aangemaakt_op   timestamptz      │
+                                        │ afgehandeld_op  timestamptz      │
+                                        └──────────────────────────────────┘
+</pre>
+
+<h2>Vragenlijsten</h2>
+<pre>
+┌──────────────────────────────────────────────┐
+│ vragensets                                   │
+├──────────────────────────────────────────────┤
+│ <span class="pk">id              uuid        PK</span>               │
+│ naam            text                         │
+│ artikelcode     text        filter (optioneel)│
+│ betalercode     text        filter (optioneel)│
+│ opdrachtcode    text        filter (optioneel)│
+│ productgroep    text        filter (optioneel)│
+│ actief          boolean                      │
+│ aangemaakt_op   timestamptz                  │
+│                                              │
+│ Matchlogica: lege velden = wildcard          │
+└──────────────────┬───────────────────────────┘
+                   │ vragenset_id (FK)
+                   ▼
+┌──────────────────────────────────────────────┐
+│ vragen                                       │
+├──────────────────────────────────────────────┤
+│ <span class="pk">id              uuid        PK</span>               │
+│ <span class="fk">vragenset_id    uuid        FK</span>               │
+│ vraag_tekst     text                         │
+│ type            text  (meerkeuze/schaal/open)│
+│ volgorde        integer                      │
+│ verplicht       boolean                      │
+└──────────────────┬───────────────────────────┘
+                   │ vraag_id (FK)
+                   ▼
+┌──────────────────────────────────────────────┐
+│ antwoordopties                               │
+├──────────────────────────────────────────────┤
+│ <span class="pk">id              uuid        PK</span>               │
+│ <span class="fk">vraag_id        uuid        FK</span>               │
+│ tekst           text                         │
+│ waarde          integer                      │
+│ volgorde        integer                      │
+└──────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────┐
+│ reparatie_antwoorden                         │
+├──────────────────────────────────────────────┤
+│ <span class="pk">id              uuid        PK</span>               │
+│ <span class="fk">reparatie_id    uuid        FK? → reparaties</span> │
+│ <span class="fk">vragenlijst_id  uuid        FK → vragensets</span>  │
+│ opdrachtnr      text                         │
+│ artikelcode     text                         │
+│ betalercode     text                         │
+│ vraagnr         integer                      │
+│ antwoord        text                         │
+└──────────────────────────────────────────────┘
+</pre>
+
+<h2>Overig</h2>
+<pre>
+┌──────────────────────────────────┐   ┌──────────────────────────────────┐
+│ exploded_views                   │   │ reparatie_geluiden               │
+├──────────────────────────────────┤   ├──────────────────────────────────┤
+│ <span class="pk">id           uuid  PK</span>            │   │ <span class="pk">id               uuid  PK</span>         │
+│ artikelcode  text  UNIQUE        │   │ <span class="fk">reparatie_id     uuid  FK</span>          │
+│ bestandspad  text                │   │ <span class="fk">monteur_id       uuid  FK</span>          │
+│ bestandsnaam text                │   │ artikelcode     text             │
+│ aangemaakt_op timestamptz        │   │ apparaat_type   text             │
+│                                  │   │ bestandspad     text             │
+│ Storage bucket: exploded-views   │   │ duur_sec        integer          │
+└──────────────────────────────────┘   │ klacht          text             │
+                                       │ aangemaakt_op   timestamptz      │
+                                       │                                  │
+                                       │ Storage bucket: reparatie-geluiden│
+                                       └──────────────────────────────────┘
+
+┌──────────────────────────────────┐   ┌──────────────────────────────────┐
+│ werkinstructies                  │   │ rens_berichten                   │
+├──────────────────────────────────┤   ├──────────────────────────────────┤
+│ <span class="pk">id           uuid  PK</span>            │   │ <span class="pk">id               uuid  PK</span>         │
+│ apparaat_type text               │   │ <span class="fk">monteur_id       uuid  FK</span>          │
+│ artikelcode  text                │   │ rol             text (user/asst) │
+│ instructie   text                │   │ inhoud          text             │
+│ aangemaakt_op timestamptz        │   │ aangemaakt_op   timestamptz      │
+└──────────────────────────────────┘   └──────────────────────────────────┘
+
+┌──────────────────────────────────┐
+│ scherm_commando                  │
+├──────────────────────────────────┤
+│ <span class="pk">id           uuid  PK</span>            │
+│ commando     text                │
+│ payload      jsonb               │
+│ aangemaakt_op timestamptz        │
+│                                  │
+│ Realtime → werkplaats_scherm.html│
+└──────────────────────────────────┘
+</pre>
+
+<h2>ERP Sync</h2>
+<pre>
+BigQuery (Drive_Werkplaats_App_native)
+    │
+    │  Cloud Run (main.py) — elke X minuten
+    │  1. Query BigQuery
+    │  2. Upsert → reparaties (on_conflict: opdrachtnr + regelnummer)
+    │  3. Verdwenen opdrachtnrs → log in reparatie_logs (SYS) + delete
+    ▼
+reparaties (Supabase)
+</pre>
+
+<h2>Statusflow reparaties</h2>
+<pre>
+445 (Openstaand)
+    │
+    │  Monteur claimt / Manager wijst toe
+    ▼
+465 (In behandeling)
+    │
+    │  Monteur rondt af
+    ▼
+519 (Afgerond)
+    │
+    │  ERP sync verwijdert na export
+    ▼
+(verwijderd uit reparaties, log blijft in reparatie_logs)
+</pre>
+
+</body>
+</html>
