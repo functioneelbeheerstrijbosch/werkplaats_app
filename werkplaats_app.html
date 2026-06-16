@@ -6972,15 +6972,6 @@ function stopChatMic() {
   if (input) input.placeholder = 'Stel een vraag...';
 }
 
-// ── GEMINI CHAT ───────────────────────────────────────────────
-// GEMINI_KEY wordt ingeladen vanuit config.js (leeg = chat uitgeschakeld)
-const GEMINI_URL = ``;
-
-// ── EMAILJS (foutmeldingen) ────────────────────────────────────
-// Vul hieronder je gegevens in van emailjs.com
-const EMAILJS_PUBLIC_KEY  = 'cjP4B0PO-6s4LiwGB';   // Account → API Keys
-const EMAILJS_SERVICE_ID  = 'service_x5tgdz8';   // Email Services → Service ID
-const EMAILJS_TEMPLATE_ID = 'template_7fexmis';  // Email Templates → Template ID
 emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 
 let alleWerkinstructies  = [];
