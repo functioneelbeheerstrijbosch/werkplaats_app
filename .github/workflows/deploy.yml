@@ -19,8 +19,10 @@ jobs:
           $source = "${{ github.workspace }}"
           $destination = "${{ secrets.IIS_PATH }}"
 
-          robocopy $source $destination /MIR /XD ".git"
+          robocopy $source $destination /MIR /XD ".git" ".github"
 
           if ($LASTEXITCODE -gt 7) {
               exit $LASTEXITCODE
           }
+
+          exit 0
