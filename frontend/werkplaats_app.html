@@ -1,0 +1,1040 @@
+﻿<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Werkplaats — Strijbosch</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#001e3c">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Werkplaats">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ──────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-illustratie"></div>
+
+  <div class="login-kaart">
+    <img class="login-logo-img" src="https://www.strijbosch.nl/logos/logo.svg" alt="Strijbosch">
+    <div class="login-divider"></div>
+    <div class="login-title">Werkplaats — Inloggen</div>
+    <div class="login-form">
+      <input type="email"    class="login-input" id="login-email" placeholder="E-mailadres"
+        autocomplete="email" onkeydown="if(event.key==='Enter') signIn()">
+      <input type="password" class="login-input" id="login-ww"    placeholder="Wachtwoord"
+        autocomplete="current-password" onkeydown="if(event.key==='Enter') signIn()">
+      <button class="login-btn" id="login-btn" onclick="signIn()">Inloggen</button>
+      <div id="login-fout" class="login-fout"></div>
+    </div>
+  </div>
+
+  <div class="login-footer">WERKPLAATS APP · STRIJBOSCH B.V.</div>
+</div>
+
+<!-- ── APP ──────────────────────────────────────────────────── -->
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <img src="https://www.strijbosch.nl/logos/logo.svg" alt="Strijbosch" style="height:22px;width:auto;margin-bottom:3px">
+      <div class="header-sub" id="header-datum"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshApp()" title="Vernieuwen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
+      <div class="monteur-chip" onclick="showLogout()">
+        <div class="chip-dot" id="chip-initialen">--</div>
+        <div class="chip-name" id="chip-naam">Monteur</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('open')" id="tab-open" style="display:none">
+      Werkplaats
+      <span class="tab-count" id="count-open">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('witgoed')" id="tab-witgoed" style="display:none">
+      Witgoed
+      <span class="tab-count" id="count-witgoed">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('behandeling')" id="tab-behandeling">
+      In behandeling
+      <span class="tab-count" id="count-behandeling">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('afgerond')" id="tab-afgerond">
+      Afgerond
+      <span class="tab-count" id="count-afgerond">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('onderdelen')" id="tab-onderdelen" style="display:none">
+      Onderdelen besteld
+      <span class="tab-count" id="count-onderdelen">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('nov')" id="tab-nov" style="display:none">
+      N.o.v.
+      <span class="tab-count" id="count-nov">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('locatie')" id="tab-locatie" style="display:none">
+      Locatie
+      <span class="tab-count">―</span>
+    </div>
+    <div class="tab" onclick="switchTab('prep')" id="tab-prep" style="display:none">
+      Apparaat koppelen
+      <span class="tab-count" id="count-prep">―</span>
+    </div>
+    <div class="tab" onclick="switchTab('config')" id="tab-config">
+      ⚙
+      <span class="tab-count">―</span>
+    </div>
+  </div>
+
+  <!-- Views -->
+  <div class="views">
+    <!-- Openstaand -->
+    <div class="view active" id="view-open">
+      <div class="app-filter-bar">
+        <input class="app-filter-zoek" id="af-open-zoek" type="text" placeholder="Opdrachtnr…" oninput="renderLists()">
+        <div class="ms-wrap" id="ms-open-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-open-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-open-opdrachtcode"></div></div>
+        <div class="ms-wrap" id="ms-open-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-open-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-open-opdrachtstatus"></div></div>
+        <div class="ms-wrap" id="ms-open-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-open-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-open-landcode"></div></div>
+        <div class="ms-wrap" id="ms-open-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-open-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-open-handeling"></div></div>
+        <div class="ms-wrap" id="ms-open-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-open-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-open-organisatie"></div></div>
+        <div class="ms-wrap" id="ms-open-werkplaats"><button class="ms-btn" data-label="Werkplaats" onclick="toggleMs('ms-open-werkplaats')">Werkplaats</button><div class="ms-panel" data-wrap="ms-open-werkplaats"></div></div>
+        <div class="ms-wrap" id="ms-open-reden-datum"><button class="ms-btn" data-label="Reden datum" onclick="toggleMs('ms-open-reden-datum')">Reden datum</button><div class="ms-panel" data-wrap="ms-open-reden-datum"></div></div>
+        <button class="app-filter-reset" id="af-open-reset" onclick="resetAppFilter('open')">Wis</button>
+      </div>
+      <div class="card-list" id="list-open"></div>
+    </div>
+
+    <!-- In behandeling -->
+    <div class="view" id="view-behandeling">
+      <div class="app-filter-bar">
+        <input class="app-filter-zoek" id="af-beh-zoek" type="text" placeholder="Opdrachtnr…" oninput="renderLists()">
+        <div class="ms-wrap" id="ms-beh-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-beh-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-beh-opdrachtcode"></div></div>
+        <div class="ms-wrap" id="ms-beh-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-beh-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-beh-opdrachtstatus"></div></div>
+        <div class="ms-wrap" id="ms-beh-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-beh-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-beh-landcode"></div></div>
+        <div class="ms-wrap" id="ms-beh-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-beh-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-beh-handeling"></div></div>
+        <div class="ms-wrap" id="ms-beh-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-beh-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-beh-organisatie"></div></div>
+        <div class="ms-wrap" id="ms-beh-werkplaats"><button class="ms-btn" data-label="Werkplaats" onclick="toggleMs('ms-beh-werkplaats')">Werkplaats</button><div class="ms-panel" data-wrap="ms-beh-werkplaats"></div></div>
+        <div class="ms-wrap" id="ms-beh-reden-datum"><button class="ms-btn" data-label="Reden datum" onclick="toggleMs('ms-beh-reden-datum')">Reden datum</button><div class="ms-panel" data-wrap="ms-beh-reden-datum"></div></div>
+        <button class="app-filter-reset" id="af-beh-reset" onclick="resetAppFilter('beh')">Wis</button>
+      </div>
+      <div class="card-list" id="list-behandeling"></div>
+    </div>
+
+    <!-- Afgerond -->
+    <div class="view" id="view-afgerond">
+      <div class="app-filter-bar">
+        <input class="app-filter-zoek" id="af-af-zoek" type="text" placeholder="Opdrachtnr…" oninput="renderLists()">
+        <div class="ms-wrap" id="ms-af-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-af-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-af-opdrachtcode"></div></div>
+        <div class="ms-wrap" id="ms-af-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-af-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-af-opdrachtstatus"></div></div>
+        <div class="ms-wrap" id="ms-af-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-af-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-af-landcode"></div></div>
+        <div class="ms-wrap" id="ms-af-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-af-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-af-handeling"></div></div>
+        <div class="ms-wrap" id="ms-af-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-af-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-af-organisatie"></div></div>
+        <div class="ms-wrap" id="ms-af-werkplaats"><button class="ms-btn" data-label="Werkplaats" onclick="toggleMs('ms-af-werkplaats')">Werkplaats</button><div class="ms-panel" data-wrap="ms-af-werkplaats"></div></div>
+        <div class="ms-wrap" id="ms-af-reden-datum"><button class="ms-btn" data-label="Reden datum" onclick="toggleMs('ms-af-reden-datum')">Reden datum</button><div class="ms-panel" data-wrap="ms-af-reden-datum"></div></div>
+        <button class="app-filter-reset" id="af-af-reset" onclick="resetAppFilter('af')">Wis</button>
+      </div>
+      <div style="padding:6px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+        <label style="font-size:12px;color:var(--muted);white-space:nowrap">Periode:</label>
+        <input type="date" id="afgerond-van" style="font-size:13px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:var(--surface);color:var(--text);cursor:pointer" onchange="herlaadAfgerond()">
+        <span style="font-size:12px;color:var(--muted)">t/m</span>
+        <input type="date" id="afgerond-tm" style="font-size:13px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:var(--surface);color:var(--text);cursor:pointer" onchange="herlaadAfgerond()">
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="resetAfgerondPeriode()">Vandaag</button>
+      </div>
+      <div class="card-list" id="list-afgerond"></div>
+    </div>
+
+    <!-- Onderdelen besteld -->
+    <div class="view" id="view-onderdelen">
+      <div class="card-list" id="list-onderdelen" style="padding:12px 12px 80px"></div>
+    </div>
+
+    <!-- Witgoed -->
+    <div class="view" id="view-witgoed">
+      <div class="app-filter-bar">
+        <input class="app-filter-zoek" id="af-wg-zoek" type="text" placeholder="Opdrachtnr…" oninput="renderLists()">
+        <div class="ms-wrap" id="ms-wg-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-wg-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-wg-opdrachtcode"></div></div>
+        <div class="ms-wrap" id="ms-wg-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-wg-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-wg-opdrachtstatus"></div></div>
+        <div class="ms-wrap" id="ms-wg-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-wg-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-wg-landcode"></div></div>
+        <div class="ms-wrap" id="ms-wg-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-wg-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-wg-handeling"></div></div>
+        <div class="ms-wrap" id="ms-wg-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-wg-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-wg-organisatie"></div></div>
+        <div class="ms-wrap" id="ms-wg-reden-datum"><button class="ms-btn" data-label="Reden datum" onclick="toggleMs('ms-wg-reden-datum')">Reden datum</button><div class="ms-panel" data-wrap="ms-wg-reden-datum"></div></div>
+        <button class="app-filter-reset" id="af-wg-reset" onclick="resetAppFilter('wg')">Wis</button>
+      </div>
+      <div class="card-list" id="list-witgoed"></div>
+    </div>
+
+    <!-- N.o.v. -->
+    <div class="view" id="view-nov">
+      <div class="card-list" id="list-nov" style="padding:12px 12px 80px"></div>
+    </div>
+
+    <!-- Werkvoorbereiding -->
+    <div class="view" id="view-prep">
+      <div class="prep-split">
+        <!-- Links: Voorraad -->
+        <div class="prep-paneel">
+          <div class="prep-paneel-hdr" id="prep-paneel-voorraad-hdr">
+            <div class="prep-paneel-titel" id="prep-voorraad-titel">Beschikbare voorraad</div>
+            <span class="prep-paneel-tel" id="prep-voorraad-tel">—</span>
+          </div>
+          <div class="prep-paneel-body" id="prep-voorraad-lijst"
+               ondragover="prepOntkoppelDragOver(event)"
+               ondragleave="prepOntkoppelDragLeave(event)"
+               ondrop="prepOntkoppelDrop(event)">
+            <div class="prep-leeg">Laden…</div>
+          </div>
+        </div>
+        <!-- Rechts: Opdrachten -->
+        <div class="prep-paneel">
+          <div class="prep-paneel-hdr">
+            <div class="prep-paneel-titel">Openstaande opdrachten</div>
+            <span class="prep-paneel-tel" id="prep-orders-tel">0</span>
+          </div>
+          <div class="app-filter-bar" style="position:sticky;top:0;z-index:10">
+            <button class="ms-btn" id="prep-sort-afstand-btn" onclick="prepSetSort('afstand')" style="flex-shrink:0">📍 Afstand</button>
+            <button class="ms-btn" id="prep-sort-datum-btn" onclick="prepSetSort('datum')" style="flex-shrink:0">📅 Datum</button>
+            <div class="ms-wrap" id="ms-prep-productgroep"><button class="ms-btn" data-label="Productgroep" onclick="toggleMs('ms-prep-productgroep')">Productgroep</button><div class="ms-panel" data-wrap="ms-prep-productgroep"></div></div>
+            <div class="ms-wrap" id="ms-prep-artikelcode"><button class="ms-btn" data-label="Artikelcode" onclick="toggleMs('ms-prep-artikelcode')">Artikelcode</button><div class="ms-panel" data-wrap="ms-prep-artikelcode"></div></div>
+            <div class="ms-wrap" id="ms-prep-organisatie"><button class="ms-btn" data-label="Klantgroep" onclick="toggleMs('ms-prep-organisatie')">Klantgroep</button><div class="ms-panel" data-wrap="ms-prep-organisatie"></div></div>
+            <input type="date" id="prep-filter-datum" class="app-filter-zoek" style="min-width:0;width:130px" title="Uiterste datum t/m" onchange="prepRenderOrders()">
+            <button class="app-filter-reset" onclick="resetPrepFilters()">Wis</button>
+          </div>
+          <div class="prep-paneel-body" id="prep-orders-lijst"
+               ondragover="prepListDragOver(event)"
+               ondragleave="prepListDragLeave(event)"
+               ondrop="prepListDrop(event)">
+            <div class="prep-leeg">Laden…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Locatie aanpassen -->
+    <div class="view" id="view-locatie">
+      <div style="padding:16px;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px">
+
+        <!-- Flash feedback (succes of fout) -->
+        <div class="loc-flash" id="loc-flash" style="display:none"></div>
+
+        <!-- Stap 1 -->
+        <div class="loc-stap-kaart" id="loc-stap1-kaart">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div class="loc-stap-nr actief" id="loc-nr1">1</div>
+            <div>
+              <div style="font-size:14px;font-weight:600">Scan tagnummer</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de barcode of QR van het item</div>
+            </div>
+          </div>
+          <input class="loc-scan-input" id="loc-tag-input" type="text"
+            placeholder="Scan of typ tagnummer…"
+            onkeydown="if(event.key==='Enter')locTagGescand()"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <div class="loc-tag-badge" id="loc-tag-badge" style="display:none"></div>
+        </div>
+
+        <!-- Stap 2 -->
+        <div class="loc-stap-kaart" id="loc-stap2-kaart" style="opacity:.45">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div class="loc-stap-nr" id="loc-nr2">2</div>
+            <div>
+              <div style="font-size:14px;font-weight:600">Scan locatie</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de locatiecode</div>
+            </div>
+          </div>
+          <input class="loc-scan-input" id="loc-loc-input" type="text"
+            placeholder="Scan of typ locatie…"
+            onkeydown="if(event.key==='Enter')locLocGescand()"
+            autocomplete="off" autocorrect="off" spellcheck="false"
+            disabled>
+        </div>
+
+        <!-- Log -->
+        <div id="loc-log-wrap" style="display:none">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Recente scans</div>
+          <div id="loc-log-lijst"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="view" id="view-config">
+      <div class="config-screen">
+        <div class="config-title">Instellingen</div>
+        <div id="cfg-status" style="font-size:12px;color:var(--ok);margin-bottom:12px;font-family:var(--mono)">✓ Verbonden met Supabase</div>
+
+        <!-- Taalinstelling sectie -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;margin-bottom:4px">
+          <div class="config-title" style="margin-bottom:6px">Mijn taal</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">De taal waarin je klacht en werkzaamheden invult. Tekst wordt automatisch naar het Nederlands vertaald.</div>
+          <select id="cfg-taal" onchange="slaaTaalOp(this.value)"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+                   color:var(--text);font-family:var(--font);font-size:14px;padding:10px 12px">
+            <option value="nl">🇳🇱 Nederlands</option>
+            <option value="en">🇬🇧 Engels</option>
+            <option value="pl">🇵🇱 Pools</option>
+            <option value="sw">🇰🇪 Swahili</option>
+          </select>
+          <div id="cfg-taal-status" style="font-size:11px;color:var(--ok);min-height:16px;margin-top:6px;font-family:var(--mono)"></div>
+        </div>
+
+        <!-- Standaard filter sectie -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="config-title" style="margin-bottom:0">Standaard filter</div>
+            <span id="sf-actief-badge" style="display:none;font-size:10px;font-family:var(--mono);background:rgba(236,101,0,.12);color:var(--accent);border:1px solid rgba(236,101,0,.3);border-radius:10px;padding:2px 8px">ACTIEF</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Voeg regels toe om opdrachten te tonen of verbergen.</div>
+          <div id="sf-regels"></div>
+          <button class="btn btn-ghost" style="width:100%;margin-top:6px;border-style:dashed" onclick="sfVoegRegelToe()">+ Regel toevoegen</button>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" style="flex:1" onclick="slaStandaardFilterOp()">Opslaan</button>
+            <button class="btn btn-ghost" onclick="resetStandaardFilter()">Wis alles</button>
+          </div>
+        </div>
+
+        <!-- Bug melden sectie -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+          <div style="display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;background:rgba(217,48,37,.1);color:var(--danger);border:1px solid rgba(217,48,37,.3);border-radius:4px;padding:2px 7px;margin-bottom:10px;letter-spacing:.06em">BUG MELDEN</div>
+          <div class="config-title" style="margin-bottom:10px">Iets werkt niet goed?</div>
+
+          <div class="form-group">
+            <label class="form-label">Omschrijf het probleem</label>
+            <textarea class="form-textarea" id="bug-omschrijving" placeholder="Wat ging er mis? Wat deed je op dat moment?" style="min-height:90px"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Screenshot of foto (optioneel)</label>
+            <label id="bug-foto-label" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px dashed var(--border);border-radius:var(--r);cursor:pointer">
+              <span style="font-size:20px">📷</span>
+              <span id="bug-foto-naam" style="font-size:12px;color:var(--muted)">Foto kiezen of maak een foto</span>
+              <input type="file" id="bug-foto-input" accept="image/*" style="display:none" onchange="bugFotoGekozen(this)">
+            </label>
+            <div id="bug-foto-preview" style="margin-top:8px;display:none">
+              <img id="bug-foto-img" style="max-width:100%;max-height:180px;border-radius:var(--r);border:1px solid var(--border)" src="">
+              <button onclick="bugFotoWissen()" style="display:block;margin-top:4px;font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer">Foto verwijderen</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="verstuurBugMelding()">Melding versturen</button>
+          <div id="bug-status" style="font-size:12px;min-height:18px;margin-top:8px"></div>
+        </div>
+
+        <!-- Admin sectie — alleen zichtbaar voor admins -->
+        <div class="admin-sectie" id="admin-sectie" style="display:none">
+          <div class="admin-badge">BEHEER</div>
+          <div class="config-title" style="margin-bottom:10px">Vragensets</div>
+          <div id="admin-vragensets-lijst">
+            <div style="font-size:12px;color:var(--muted)">Laden...</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openNieuweVragenset()">
+            + Nieuwe vragenset
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Reparatie detail / start ──────────────────────── -->
+<div class="modal-overlay" id="modal-start">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="ms-title">300001</div>
+    <div class="modal-sub"  id="ms-sub">Wasmachine · Bosch Series 6</div>
+    <div id="ms-instructies" style="display:none"></div>
+    <div class="modal-section" id="ms-artikelcode-sectie" style="display:none">
+      <div class="modal-label">Artikelcode</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="modal-value" id="ms-artikelcode" style="font-family:var(--mono);font-size:13px">—</div>
+          <div id="ms-voorraad-badge"></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="histories-knop" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);color:var(--info)" onclick="toonApparaatGeschiedenis()">📋 Historie</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-section" id="ms-apparaat-sectie" style="display:none">
+      <div class="modal-label">Apparaat</div>
+      <div class="modal-value" id="ms-apparaat">—</div>
+    </div>
+    <div class="modal-section" id="ms-tagnummer-sectie" style="display:none">
+      <div class="modal-label">Tagnummer</div>
+      <div class="modal-value" id="ms-tagnummer" style="font-family:var(--mono);font-size:13px">—</div>
+      <div id="ms-memogeschiedenis-wrap" style="display:none;margin-top:8px">
+        <div class="modal-label" style="margin-bottom:4px">Memogeschiedenis tagnummer</div>
+        <div id="ms-memogeschiedenis" style="padding:8px 10px;background:rgba(0,69,130,.05);border-left:3px solid var(--primary);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text);line-height:1.5;white-space:pre-wrap"></div>
+      </div>
+    </div>
+    <div class="modal-section" id="ms-aantal-sectie" style="display:none">
+      <div class="modal-label">Aantal</div>
+      <div class="modal-value" id="ms-aantal" style="font-family:var(--mono);font-size:13px">—</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Klacht</div>
+      <div class="modal-value" id="ms-klacht">—</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Klant</div>
+      <div class="modal-value" id="ms-klant">—</div>
+    </div>
+
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="startReparatie()">Claimen</button>
+    <button class="btn btn-ghost" style="margin-top:8px;color:#f5a623;border-color:#f5a623" onclick="zetWachtOpOnderdelen()">📦 Wacht op onderdelen</button>
+    <button class="btn btn-ghost" onclick="closeModal('modal-start')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Afronden ──────────────────────────────────────── -->
+<!-- ── MODAL: Werkzaamheden checklist ─────────────────────────── -->
+<div class="modal-overlay" id="modal-werkcheck">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+      <div class="modal-title" style="margin-bottom:0">Werkzaamheden controleren</div>
+      <button onclick="closeModal('modal-werkcheck')" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 2px" title="Annuleren">✕</button>
+    </div>
+    <div class="modal-sub">Vink alle werkzaamheden af om door te gaan met afronden.</div>
+    <div id="wc-lijst" style="margin:12px 0"></div>
+    <hr class="modal-divider">
+    <button class="btn btn-primary" id="wc-doorgaan-btn" onclick="bevestigWerkCheck()" disabled>Doorgaan</button>
+    <button class="btn btn-ghost" onclick="closeModal('modal-werkcheck')">Annuleren</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-afrond">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+      <div class="modal-title" id="ma-title" style="margin-bottom:0">Reparatie afronden</div>
+      <button onclick="closeModal('modal-afrond')" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0" title="Annuleren">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+      <div class="modal-sub" id="ma-sub" style="margin-bottom:0">—</div>
+      <span id="ma-taal-badge" style="font-size:10px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;color:var(--muted);white-space:nowrap"></span>
+    </div>
+
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Diagnose / wat was het probleem?</label>
+      <div class="spraak-wrap">
+        <textarea class="form-textarea spraak-notitie" id="ma-diagnose" placeholder="Beschrijf de oorzaak van het defect..."></textarea>
+        <button class="spraak-btn" id="spraak-diagnose-btn" onclick="toggleSpraak('ma-diagnose','spraak-diagnose-btn','Beschrijf de oorzaak van het defect...')" title="Inspreken">🎙</button>
+      </div>
+      <div id="ma-regel-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+        Wat heb je gedaan?
+        <span id="spraak-status" style="font-size:10px;color:var(--muted);font-family:var(--mono)"></span>
+      </label>
+      <div id="ma-werkplaats-taken"></div>
+      <div class="spraak-wrap">
+        <textarea class="form-textarea spraak-notitie" id="ma-notitie" placeholder="Omschrijf de uitgevoerde werkzaamheden..."></textarea>
+        <button class="spraak-btn" id="spraak-btn" onclick="toggleSpraak('ma-notitie','spraak-btn','Omschrijf de uitgevoerde werkzaamheden...')" title="Inspreken">🎙</button>
+      </div>
+      <div id="ma-notitie-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    </div>
+
+    <div id="ma-vragen-antwoorden" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Vragenlijst antwoorden · worden meegenomen in werkzaamheden</div>
+      <div id="ma-vragen-tekst" style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Gebruikte onderdelen</label>
+      <div class="onderdeel-tags" id="ma-onderdelen-tags">
+        <span class="onderdeel-tags-leeg" id="ma-tags-leeg">Geen onderdelen toegevoegd</span>
+      </div>
+      <input type="text" class="form-input" id="ma-onderdeel-extra"
+        placeholder="Extra onderdeel toevoegen..."
+        style="margin-top:6px"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();voegExtraOnderdeelToe()}">
+    </div>
+
+    <div class="form-group" id="ma-tagnr-sectie" style="display:none">
+      <label class="form-label">Tagnummers</label>
+      <div id="ma-tagnr-lijst"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" class="form-input" id="ma-tagnr-input" placeholder="Tagnummer toevoegen..."
+          style="flex:1;font-family:var(--mono);font-size:14px"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();voegAfrondTagnrToe()}">
+        <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:6px 14px" onclick="voegAfrondTagnrToe()">+</button>
+      </div>
+      <button type="button" onclick="toggleAfrondTagnrReeks()" style="font-size:12px;color:var(--primary);background:none;border:none;cursor:pointer;padding:4px 0;text-decoration:underline;margin-top:4px">Reeks invoeren (van t/m)</button>
+      <div id="ma-tagnr-reeks-paneel" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-top:6px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Reeks invoeren</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" class="form-input" id="ma-tagnr-reeks-van" placeholder="Van" style="flex:1;min-width:70px;font-family:var(--mono)">
+          <span style="font-size:13px;color:var(--muted);flex-shrink:0">t/m</span>
+          <input type="text" class="form-input" id="ma-tagnr-reeks-tot" placeholder="Tot" style="flex:1;min-width:70px;font-family:var(--mono)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();voegAfrondReeksToe()}">
+          <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:6px 14px" onclick="voegAfrondReeksToe()">Toevoegen</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Bestede tijd</label>
+      <div class="tijd-row">
+        <input type="number" class="form-input tijd-input" id="ma-uren" placeholder="0" min="0" max="99"
+          oninput="controleerUren(this)" onblur="controleerUren(this)">
+        <span class="tijd-label-sm">uur</span>
+        <input type="number" class="form-input tijd-input" id="ma-minuten" placeholder="0" min="0" max="59">
+        <span class="tijd-label-sm">min</span>
+      </div>
+      <div class="uren-waarschuwing" id="ma-uren-waarschuwing">⚠ Grote hoeveelheid tijd geselecteerd</div>
+    </div>
+
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="afrondOfUitkomst()">✓ Afgerond</button>
+    <button class="btn btn-ghost"   onclick="closeModal('modal-afrond')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Uitkomst REP-opdracht ─────────────────────────── -->
+<div class="modal-overlay" id="modal-uitkomst">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Uitkomst reparatie</div>
+    <div class="modal-sub" id="mu-sub">—</div>
+    <div style="margin-top:8px;font-size:13px;color:var(--muted);margin-bottom:16px">
+      Wat is de uitkomst van deze reparatie?
+    </div>
+    <button class="btn btn-primary" style="background:var(--ok);border-color:var(--ok);margin-bottom:10px"
+      onclick="kiesUitkomst('gerepareerd')">✓ Gerepareerd</button>
+    <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger);margin-bottom:10px"
+      onclick="kiesUitkomst('afgekeurd')">✗ Afgekeurd</button>
+    <button class="btn btn-ghost" onclick="closeModal('modal-uitkomst')">Terug</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Hele opdracht claimen (preview) ───────────────── -->
+<div class="modal-overlay" id="modal-claim-preview">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="mcp-title">Opdracht claimen</div>
+    <div class="modal-sub"   id="mcp-sub">—</div>
+    <div class="modal-section">
+      <div class="modal-label">Klacht</div>
+      <div class="modal-value" id="mcp-klacht">—</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Apparaten</div>
+      <div id="mcp-regels" style="display:flex;flex-direction:column;gap:8px;margin-top:4px"></div>
+    </div>
+    <hr class="modal-divider">
+    <button class="btn btn-primary" id="mcp-bevestig-btn" onclick="bevestigClaimAlles()">Hele opdracht claimen</button>
+    <button class="btn btn-ghost"   onclick="closeModal('modal-claim-preview')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Hele opdracht afronden ────────────────────────── -->
+<div class="modal-overlay" id="modal-afrond-bulk">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+      <div class="modal-title" id="mab-title" style="margin-bottom:0">Opdracht afronden</div>
+      <button onclick="closeModal('modal-afrond-bulk')" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0" title="Annuleren">✕</button>
+    </div>
+    <div class="modal-sub" id="mab-sub">—</div>
+
+    <div class="form-group">
+      <label class="form-label">Diagnose / wat was het probleem?</label>
+      <textarea class="form-textarea" id="mab-diagnose" placeholder="Beschrijf de oorzaak van het defect..."></textarea>
+      <div id="mab-regel-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Wat heb je gedaan?</label>
+      <div id="mab-werkplaats-taken"></div>
+      <textarea class="form-textarea" id="mab-notitie" placeholder="Omschrijf de uitgevoerde werkzaamheden..."></textarea>
+      <div id="mab-notitie-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    </div>
+
+    <div id="mab-vragen-antwoorden" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Vragenlijst antwoorden · worden meegenomen in werkzaamheden</div>
+      <div id="mab-vragen-tekst" style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6"></div>
+    </div>
+
+    <!-- Gemeten totaaltijd advies -->
+    <div id="mab-gemeten-banner" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em">Gemeten totaaltijd · advies</div>
+      <div style="font-size:15px;font-weight:700;font-family:var(--mono);margin-top:2px" id="mab-gemeten-label">—</div>
+    </div>
+
+    <!-- Per-regel tijdinvoer -->
+    <div class="form-group">
+      <label class="form-label">Bestede tijd per regel</label>
+      <div id="mab-regels-container" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted)">Totaal gealloceerd</span>
+        <span style="font-size:13px;font-weight:700;font-family:var(--mono)" id="mab-totaal-alloc">0 min</span>
+      </div>
+      <div id="mab-verschil-label" style="font-size:12px;font-weight:600;margin-top:4px;display:none"></div>
+    </div>
+
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="bevestigBulkAfrond()">✓ Alles afgerond</button>
+    <button class="btn btn-ghost"   onclick="closeModal('modal-afrond-bulk')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: In behandeling detail ─────────────────────────── -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="md-titel">—</div>
+    <div class="modal-sub"   id="md-sub">—</div>
+
+    <!-- View: Keuze (standaard) -->
+    <div id="md-keuze">
+      <!-- Kloktimer -->
+      <div style="margin-bottom:14px">
+        <button id="md-klok-btn" onclick="toggleKlok()" style="width:100%;padding:14px;border-radius:var(--r);border:2px solid var(--primary);background:none;color:var(--primary);font-size:15px;font-weight:700;cursor:pointer;text-align:center">
+          ⏱ Start opdracht
+        </button>
+        <div id="md-klok-tijd" style="display:none;font-family:var(--mono);font-size:20px;font-weight:700;color:var(--primary);text-align:center;margin-top:6px">00:00:00</div>
+        <div id="md-klok-info" style="display:none;font-size:11px;color:var(--muted);text-align:center;margin-top:2px"></div>
+      </div>
+
+      <div id="md-instructies" style="display:none"></div>
+      <div class="modal-section" id="md-artikelcode-sectie" style="display:none">
+        <div class="modal-label">Artikelcode</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="modal-value" id="md-artikelcode" style="font-family:var(--mono);font-size:13px">—</div>
+            <div id="md-voorraad-badge"></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="histories-knop" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);color:var(--info)" onclick="toonApparaatGeschiedenis()">📋 Historie</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-section" id="md-apparaat-sectie" style="display:none">
+        <div class="modal-label">Apparaat</div>
+        <div class="modal-value" id="md-apparaat">—</div>
+      </div>
+      <div class="modal-section" id="md-tagnummer-sectie" style="display:none">
+        <div class="modal-label">Tagnummer</div>
+        <div class="modal-value" id="md-tagnummer" style="font-family:var(--mono);font-size:13px">—</div>
+        <div id="md-memogeschiedenis-wrap" style="display:none;margin-top:8px">
+          <div class="modal-label" style="margin-bottom:4px">Memogeschiedenis tagnummer</div>
+          <div id="md-memogeschiedenis" style="padding:8px 10px;background:rgba(0,69,130,.05);border-left:3px solid var(--primary);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text);line-height:1.5;white-space:pre-wrap"></div>
+        </div>
+      </div>
+      <div class="modal-section" id="md-aantal-sectie" style="display:none">
+        <div class="modal-label">Aantal</div>
+        <div class="modal-value" id="md-aantal" style="font-family:var(--mono);font-size:13px">—</div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-label">Klacht</div>
+        <div class="modal-value" id="md-klacht">—</div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-label">Klant</div>
+        <div class="modal-value" id="md-klant">—</div>
+      </div>
+      <hr class="modal-divider">
+      <button class="btn btn-primary" onclick="toonActiesView()">Claimen</button>
+      <button class="btn btn-ghost" style="margin-top:8px;color:var(--danger);border-color:var(--danger)" onclick="vrijgevenReparatie()">Vrijgeven</button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="closeModal('modal-detail')">Annuleren</button>
+    </div>
+
+    <!-- View: Acties -->
+    <div id="md-menu" style="display:none">
+      <button class="btn btn-primary" onclick="closeModal('modal-detail'); openAfrond(state.activeMod.id)">✓ Afronden</button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="toonOnderdelenView()">+ Onderdeel toevoegen</button>
+      <button class="btn btn-ghost" style="margin-top:8px;color:#f5a623;border-color:#f5a623" onclick="zetWachtOpOnderdelen()">📦 Wacht op onderdelen</button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="toonKeuzeView()">← Terug</button>
+    </div>
+
+    <!-- View: Onderdelen zoeken -->
+    <div id="md-onderdelen" style="display:none">
+      <div class="form-group" style="margin-bottom:10px">
+        <input type="search" class="form-input" id="md-zoek"
+          placeholder="Artikelnr of naam..." oninput="filterOnderdelenDetail()" autocomplete="off">
+      </div>
+      <div id="md-onderdeel-lijst"></div>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="toonActiesView()">← Terug</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── MODAL: Onderdeel reparatiehistorie ─────────────────── -->
+<div class="modal-overlay" id="modal-geschiedenis">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="og-naam">—</div>
+    <div class="modal-sub"   id="og-artikelnr">—</div>
+    <div id="og-lijst" style="flex:1;overflow-y:auto;min-height:0"></div>
+    <button class="btn btn-ghost" style="margin-top:12px;flex-shrink:0" onclick="closeModal('modal-geschiedenis')">Sluiten</button>
+  </div>
+</div>
+
+<!-- ── TAGNR SCAN SCHERM ─────────────────────────────────── -->
+<div id="scherm-tagnr">
+  <div class="vragen-header">
+    <div>
+      <div class="vragen-header-title">Tagnummer invoeren</div>
+      <div class="vragen-header-sub" id="tagnr-artikel-label">—</div>
+    </div>
+    <div id="tagnr-voortgang" style="font-size:11px;color:var(--muted);font-family:var(--mono)">—</div>
+  </div>
+  <div class="vragen-body" id="tagnr-body">
+    <div class="vraag-card">
+      <div class="vraag-nummer" id="tagnr-apparaat-label">Apparaat 1 van 1</div>
+      <div class="vraag-tekst">Voer het tagnummer in voor dit apparaat</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input type="text" class="form-input" id="tagnr-input"
+          placeholder="Typ/scan tagnr..."
+          style="flex:1;font-family:var(--mono);font-size:15px;letter-spacing:.04em;background:#fff;color:#001e3c"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();voegTagnrToe()}"
+          oninput="if(this.value.includes('\n')||this.value.includes('\r')){this.value=this.value.replace(/[\r\n]/g,'').trim();voegTagnrToe()}">
+        <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:6px 14px;font-size:16px;line-height:1" onclick="voegTagnrToe()">+</button>
+      </div>
+      <div id="tagnr-error" style="color:var(--danger);font-size:12px;margin-top:5px;display:none"></div>
+    </div>
+    <div style="padding:4px 0 0">
+      <button type="button" onclick="toggleTagnrReeks()" style="font-size:12px;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px 0;text-decoration:underline">Reeks invoeren (van t/m)</button>
+      <div id="tagnr-reeks-paneel" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-top:6px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Reeks invoeren</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" class="form-input" id="tagnr-reeks-van" placeholder="Van (bijv. 3012)" style="flex:1;min-width:80px;font-family:var(--mono)">
+          <span style="font-size:13px;color:var(--muted);flex-shrink:0">t/m</span>
+          <input type="text" class="form-input" id="tagnr-reeks-tot" placeholder="Tot (bijv. 3062)" style="flex:1;min-width:80px;font-family:var(--mono)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();voegReeksToe()}">
+          <button class="btn btn-primary" style="width:auto;flex-shrink:0;padding:6px 14px" onclick="voegReeksToe()">Toevoegen</button>
+        </div>
+      </div>
+    </div>
+    <div id="tagnr-lijst"></div>
+  </div>
+  <div class="vragen-footer" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div id="tagnr-tel" style="font-size:12px;color:var(--muted)">0 van ? ingevoerd</div>
+    <button class="btn btn-primary" id="tagnr-volgende-btn" onclick="bevestigTagnrRegel()">Volgende →</button>
+  </div>
+</div>
+
+<!-- ── WITGOED CLAIM SCHERM ──────────────────────────────── -->
+<div id="scherm-witgoed-claim">
+  <div class="vragen-header" style="position:relative">
+    <div>
+      <div class="vragen-header-title" id="wc-stap-titel">Tagnummer scannen</div>
+      <div class="vragen-header-sub" id="wc-opdracht-label">—</div>
+    </div>
+    <button onclick="sluitWitgoedClaim()" style="position:absolute;top:8px;right:10px;background:none;border:none;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;padding:4px 6px" title="Sluiten">✕</button>
+  </div>
+  <div class="vragen-body">
+    <div id="wc-stap-tagnr" class="vraag-card">
+      <div class="vraag-nummer">Stap 1 van 2</div>
+      <div class="vraag-tekst">Scan het tagnummer van het apparaat</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" class="form-input" id="wc-tagnr-input"
+          placeholder="Scan of typ tagnr..."
+          style="flex:1;font-family:var(--mono);font-size:16px;letter-spacing:.04em"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();bevestigWitgoedTagnr()}"
+          oninput="if(this.value.includes('\n')||this.value.includes('\r')){this.value=this.value.replace(/[\r\n]/g,'').trim();bevestigWitgoedTagnr()}">
+      </div>
+      <div id="wc-tagnr-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
+    </div>
+    <div id="wc-stap-werkplek" class="vraag-card" style="display:none">
+      <div class="vraag-nummer">Stap 2 van 2</div>
+      <div class="vraag-tekst">Scan de locatie van je werkplek</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--mono)" id="wc-tagnr-confirm">—</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" class="form-input" id="wc-werkplek-input"
+          placeholder="Scan of typ werkplek..."
+          style="flex:1;font-family:var(--mono);font-size:16px;letter-spacing:.04em"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();wcFocusNenOptisch()}"
+          oninput="if(this.value.includes('\n')||this.value.includes('\r')){this.value=this.value.replace(/[\r\n]/g,'').trim();wcFocusNenOptisch()}">
+      </div>
+      <div style="margin-top:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">NEN optisch *</label>
+        <select class="form-input" id="wc-nen-optisch-input" style="font-family:var(--mono);font-size:16px">
+          <option value="">— kies NEN waarde —</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </div>
+      <div id="wc-werkplek-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
+    </div>
+  </div>
+  <div class="vragen-footer" style="display:flex;gap:10px">
+    <button class="btn btn-ghost" id="wc-terug-btn" onclick="wcTerug()" style="display:none">← Terug</button>
+    <button class="btn btn-primary" id="wc-volgende-btn" onclick="bevestigWitgoedTagnr()" style="flex:1">Volgende →</button>
+  </div>
+</div>
+
+<!-- ── VRAGENLIJST SCHERM ────────────────────────────────── -->
+<div id="scherm-vragen">
+  <div class="vragen-header">
+    <div>
+      <div class="vragen-header-title">Diagnose vragenlijst</div>
+      <div class="vragen-header-sub" id="vragen-header-sub">—</div>
+      <div id="vragen-context-badge" style="display:none;margin-top:4px;font-size:10px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:2px 9px;color:var(--accent);display:inline-block"></div>
+    </div>
+    <div class="vragen-voortgang" id="vragen-voortgang">0/0</div>
+  </div>
+  <div class="vragen-body" id="vragen-body"></div>
+  <div class="vragen-footer">
+    <button class="btn btn-primary" onclick="bevestigVragenlijst()">Opslaan &amp; afronden →</button>
+    <div class="vragen-verplicht" id="vragen-verplicht"></div>
+  </div>
+</div>
+
+<!-- ── NIEUWE VRAGENSET SCHERM ───────────────────────────── -->
+<div id="scherm-nieuwe-vragenset">
+  <div class="pdf-header">
+    <div>
+      <div class="pdf-header-title" id="nvs-header-title">Nieuwe vragenset</div>
+      <div class="pdf-header-sub" id="nvs-header-sub">Voeg vragen toe die bij afronden worden gesteld</div>
+    </div>
+    <button class="pdf-close" onclick="sluitNieuweVragenset()">✕</button>
+  </div>
+  <div class="pdf-body" id="nvs-body">
+    <div class="form-group">
+      <label class="form-label">Titel vragenset</label>
+      <input type="text" class="form-input" id="nvs-titel" placeholder="Bijv. Vragenlijst reparatie televisie">
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Artikelcode (optioneel)</label>
+        <input type="text" class="form-input" id="nvs-artikelcode" placeholder="Bijv. SB4537" style="text-transform:uppercase">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Betalercode (optioneel)</label>
+        <input type="text" class="form-input" id="nvs-betalercode" placeholder="Bijv. 123456">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Opdrachtcode (optioneel)</label>
+        <input type="text" class="form-input" id="nvs-opdrachtcode" placeholder="Bijv. REPBB" style="text-transform:uppercase">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Productgroep (optioneel)</label>
+        <input type="text" class="form-input" id="nvs-productgroep" placeholder="Bijv. 504">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Organisatie (optioneel)</label>
+      <input type="text" class="form-input" id="nvs-organisatie" placeholder="Bijv. Strijbosch">
+    </div>
+
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+      Ingevulde velden moeten allemaal overeenkomen. Leeg laten = dat veld wordt genegeerd bij de match.
+    </div>
+
+    <div id="nvs-vragen-lijst"></div>
+
+    <button class="btn btn-ghost" style="margin-bottom:8px" onclick="voegNieuweVraagToe()">
+      + Vraag toevoegen
+    </button>
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="slaVragensetOp()">Vragenset opslaan</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="sluitNieuweVragenset()">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Logout bevestiging ────────────────────────────── -->
+<div class="modal-overlay" id="modal-logout">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Afmelden</div>
+    <div class="modal-sub" id="ml-naam">—</div>
+    <div style="height:8px"></div>
+    <button class="btn btn-danger" onclick="logout()">Afmelden</button>
+    <button class="btn btn-ghost" onclick="closeModal('modal-logout')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── FAB: Voorraad reparatie starten ──────────────────────── -->
+<button id="fab-voorraad" onclick="openVoorraadModal()" title="Voorraad reparatie starten">+</button>
+
+<!-- ── MODAL: Voorraad reparatie ────────────────────────────── -->
+<div class="modal-overlay" id="modal-voorraad">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Reparatie voor voorraad</div>
+    <div class="modal-sub">Geen klant — reparatie voor eigen voorraad</div>
+
+    <div class="form-group">
+      <label class="form-label">Artikelcode *</label>
+      <input class="form-input" id="vrd-artikelcode" type="text"
+        placeholder="bijv. SB4537" maxlength="30" autocomplete="off"
+        oninput="this.value=this.value.toUpperCase(); zoekArtikelSuggesties(this.value)"
+        onblur="if(this.value.trim()) kiesArtikelcode(this.value.trim().toUpperCase())">
+      <div id="vrd-suggesties" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Apparaat type *</label>
+      <input class="form-input" id="vrd-apparaat" type="text" placeholder="bijv. Wasmachine">
+    </div>
+
+    <div class="form-rij">
+      <div class="form-group">
+        <label class="form-label">Merk</label>
+        <input class="form-input" id="vrd-merk" type="text" placeholder="bijv. Bosch">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Model</label>
+        <input class="form-input" id="vrd-model" type="text" placeholder="optioneel">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Aantal</label>
+      <input class="form-input" id="vrd-aantal" type="number" min="1" value="1" placeholder="1">
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <input type="checkbox" id="vrd-tagnr-jn" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
+      <label for="vrd-tagnr-jn" style="font-size:13px;cursor:pointer;color:var(--text)">Tagnummers invoeren bij aanmaken</label>
+    </div>
+
+    <div id="vrd-fout" style="font-size:13px;color:var(--danger);min-height:18px;margin-bottom:8px"></div>
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="startVoorraadReparatie()">▶ Start reparatie</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="closeModal('modal-voorraad')">Annuleren</button>
+  </div>
+</div>
+
+<!-- ── MODAL: Regel toevoegen aan opdracht ──────────────────── -->
+<div class="modal-overlay" id="modal-regel">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Regel toevoegen</div>
+    <div class="modal-sub" id="mr-sub">Opdracht —</div>
+
+    <div class="form-group">
+      <label class="form-label">Artikelcode *</label>
+      <input class="form-input" id="mr-artikelcode" type="text" placeholder="bijv. SB4537" autocomplete="off"
+        oninput="this.value=this.value.toUpperCase();zoekRegelSuggesties(this.value)"
+        onblur="setTimeout(()=>{ if(this.value.trim()) vulRegelVelden(this.value.trim()); },200)">
+      <div id="mr-suggesties" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+
+    <div class="form-rij">
+      <div class="form-group">
+        <label class="form-label">Apparaat type</label>
+        <input class="form-input" id="mr-apparaat" type="text" placeholder="wordt automatisch ingevuld">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Merk</label>
+        <input class="form-input" id="mr-merk" type="text" placeholder="wordt automatisch ingevuld">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Model</label>
+      <input class="form-input" id="mr-model" type="text" placeholder="wordt automatisch ingevuld">
+    </div>
+
+    <div id="mr-fout" style="font-size:13px;color:var(--danger);min-height:18px;margin-bottom:8px"></div>
+    <div id="mr-succes" style="font-size:13px;color:var(--success,#22c55e);min-height:18px;margin-bottom:8px"></div>
+    <hr class="modal-divider">
+    <button class="btn btn-primary" onclick="slaRegelOp()">+ Toevoegen</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="closeModal('modal-regel')">Sluiten</button>
+  </div>
+</div>
+
+<!-- ── FOUTMELDING BANNER ────────────────────────────────────── -->
+<div id="fout-banner">
+  <div class="fout-banner-kop">
+    <div class="fout-banner-icon">⚠️</div>
+    <div class="fout-banner-tekst" id="fout-banner-tekst">—</div>
+    <button class="fout-banner-sluit" onclick="sluitFoutBanner()">×</button>
+  </div>
+</div>
+
+<!-- ── WITGOED AFROND MODAL ──────────────────────────────────── -->
+<div class="modal-overlay" id="modal-wg-afrond">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Apparaat afronden</div>
+    <div class="modal-sub" id="waf-opdracht-label">—</div>
+    <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px" id="waf-tagnr-label">—</div>
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">Diagnose (optioneel)</label>
+      <textarea class="form-input" id="waf-diagnose" rows="3" placeholder="Wat was het probleem?" style="resize:vertical"></textarea>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label class="form-label">Werkzaamheden *</label>
+      <textarea class="form-input" id="waf-werkzaamheden" rows="3" placeholder="Wat heb je gedaan?" style="resize:vertical"></textarea>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label class="form-label">Oorzaakcode *</label>
+      <select class="form-input" id="waf-oorzaakcode">
+        <option value="">— kies oorzaak —</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">NEN technisch *</label>
+        <select class="form-input" id="waf-nen-technisch" style="font-family:var(--mono)">
+          <option value="">— kies —</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Draaiuren *</label>
+        <input type="number" class="form-input" id="waf-draaiuren" placeholder="Bijv. 1250" min="0" style="font-family:var(--mono)">
+      </div>
+    </div>
+    <div id="waf-fout" style="color:var(--danger);font-size:12px;margin-top:6px"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('modal-wg-afrond')">Annuleren</button>
+      <button class="btn btn-primary" style="flex:2" onclick="bevestigAfrondWitgoed()">✓ Afronden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SELECTIE BALK ─────────────────────────────────────────── -->
+<div id="selectie-balk">
+  <button class="sb-annuleer" onclick="clearSelectie()" title="Deselecteren">✕</button>
+  <span class="sb-tekst" id="sb-tekst">0 geselecteerd</span>
+  <div class="sb-acties" id="sb-acties"></div>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+
+<script src="app.js"></script>
+</body>

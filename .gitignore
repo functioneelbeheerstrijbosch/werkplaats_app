@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment variables — NOOIT committen
+.env
+.env.local
+.env.production
+
+# Uploads (gegenereerd door de backend)
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
