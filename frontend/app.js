@@ -4385,6 +4385,103 @@ async function slaVragensetOp() {
 const EMAILJS_PUBLIC_KEY  = 'cjP4B0PO-6s4LiwGB';   // Account → API Keys
 const EMAILJS_SERVICE_ID  = 'service_x5tgdz8';   // Email Services → Service ID
 const EMAILJS_TEMPLATE_ID = 'template_7fexmis';  // Email Templates → Template ID
+
+// ── CHAT MICROFOON (spraak → Rens) ───────────────────────────
+let chatMicActief = false;
+let chatMicRec    = null;
+
+function toggleChatMic() {
+  if (chatMicActief) stopChatMic();
+  else startChatMic();
+}
+
+function startChatMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Spraakherkenning niet beschikbaar in deze browser'); return; }
+
+  chatMicActief = true;
+  document.getElementById('chat-mic-knop').classList.add('luistert');
+
+  function maakSessie() {
+    if (!chatMicActief) return;
+    const rec = new SR();
+    chatMicRec = rec;
+    rec.lang          = 'nl-NL';
+    rec.continuous    = false;
+    rec.interimResults = true;
+
+    const input = document.getElementById('chat-input');
+    let basis = input.value.trimEnd();
+    let interimChat = '';
+
+    rec.onresult = (e) => {
+      let interim = '', definitief = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) definitief += t;
+        else interim += t;
+      }
+      if (definitief) {
+        const sp = basis.length > 0 ? ' ' : '';
+        basis = basis + sp + definitief.trim();
+        input.value = basis;
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        input.placeholder = 'Stel een vraag...';
+        interimChat = '';
+        // Stuur direct als volledige zin
+        if (/[.?!]$/.test(definitief.trim())) {
+          stopChatMic();
+          stuurBericht();
+        }
+      } else if (interim) {
+        input.placeholder = interim;
+        interimChat = interim;
+      }
+    };
+
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      stopChatMic();
+    };
+
+    rec.onend = () => {
+      if (!chatMicActief) return;
+      if (isIOS) {
+        // Sla eventueel onafgeronde interim-tekst op voordat we stoppen
+        if (interimChat.trim()) {
+          const sp = basis.length > 0 ? ' ' : '';
+          basis = basis + sp + interimChat.trim();
+          input.value = basis;
+          input.placeholder = 'Stel een vraag...';
+          interimChat = '';
+        }
+        stopChatMic();
+        toast('Tik opnieuw op de microfoon om verder in te spreken');
+      } else {
+        setTimeout(maakSessie, 80);
+      }
+    };
+
+    try { rec.start(); } catch(e) {}
+  }
+
+  maakSessie();
+}
+
+function stopChatMic() {
+  chatMicActief = false;
+  if (chatMicRec) {
+    chatMicRec.onend = null;
+    try { chatMicRec.stop(); } catch(e) {}
+    chatMicRec = null;
+  }
+  const knop  = document.getElementById('chat-mic-knop');
+  const input = document.getElementById('chat-input');
+  if (knop) knop.classList.remove('luistert');
+  if (input) input.placeholder = 'Stel een vraag...';
+}
+
 emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 
 async function laadOorzaakcodes() {
