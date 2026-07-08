@@ -271,7 +271,6 @@ function kiesMontreur(m) {
   laadReparaties();
   laadOnderdelen();
   laadArtikelVoorraad();
-  laadWerkinstructies();
   laadVragensets();
   laadOorzaakcodes();
 }
@@ -1738,7 +1737,8 @@ function openStart(id) {
 
   renderInstructies(r.opdrachtnr, 'ms-instructies');
   resetGeluidUI('ms');
-  document.getElementById('ms-geluid-sectie').style.display = '';
+  const msGeluidSectie = document.getElementById('ms-geluid-sectie');
+  if (msGeluidSectie) msGeluidSectie.style.display = '';
   openModal('modal-start');
 }
 
@@ -2222,6 +2222,17 @@ function startSpraak(textareaId, btnId, placeholder) {
   }
 
   maakSessie();
+}
+
+function resetGeluidUI(prefix) {
+  const opname = document.getElementById(prefix + '-geluid-opname');
+  const speler = document.getElementById(prefix + '-geluid-speler');
+  if (opname) opname.style.display = 'none';
+  if (speler) speler.style.display = 'none';
+}
+
+function stopGeluid() {
+  // stub — audio recording niet actief
 }
 
 function stopSpraak() {
@@ -2721,7 +2732,8 @@ function openDetail(id) {
   }
 
   resetGeluidUI('md');
-  document.getElementById('md-geluid-sectie').style.display = '';
+  const mdGeluidSectie = document.getElementById('md-geluid-sectie');
+  if (mdGeluidSectie) mdGeluidSectie.style.display = '';
   laadKlokVoorReparatie();
   // Als de order al van de huidige monteur is → direct naar actiesmenu
   if (r.status === '465' && String(r.monteur_id) === String(state.monteur?.id)) {

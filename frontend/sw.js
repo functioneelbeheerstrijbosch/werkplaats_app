@@ -1,5 +1,5 @@
 // ── Werkplaats Service Worker ──────────────────────────────────
-const CACHE_NAAM = 'werkplaats-v3';
+const CACHE_NAAM = 'werkplaats-v4';
 
 // Bestanden die offline beschikbaar moeten zijn
 const CACHE_ASSETS = [
@@ -33,20 +33,28 @@ self.addEventListener('activate', (e) => {
 
 // ── Fetch: netwerk eerst, cache als fallback ───────────────────
 self.addEventListener('fetch', (e) => {
-  // Supabase en Gemini API-calls nooit cachen
   const url = e.request.url;
+
+  // Nooit intercepten: JS/CSS-bestanden (altijd vers van de server),
+  // backend API-calls en externe diensten
   if (
+    url.endsWith('.js') ||
+    url.endsWith('.css') ||
+    url.includes('.js?') ||
+    url.includes('localhost:3000') ||
+    url.includes('127.0.0.1:3000') ||
     url.includes('supabase.co') ||
     url.includes('googleapis.com') ||
-    url.includes('generativelanguage')
+    url.includes('generativelanguage') ||
+    url.includes('cdn.jsdelivr.net')
   ) {
-    return; // standaard netwerk-fetch
+    return; // standaard browser-fetch, geen SW interventie
   }
 
   e.respondWith(
     fetch(e.request)
       .then((resp) => {
-        // Sla succesvolle responses op in cache
+        // Sla alleen statische assets op (HTML, afbeeldingen, manifest)
         if (resp && resp.status === 200 && resp.type === 'basic') {
           const kopie = resp.clone();
           caches.open(CACHE_NAAM).then((cache) =>

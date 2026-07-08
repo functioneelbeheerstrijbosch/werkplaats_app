@@ -48,6 +48,14 @@ function isGeldigeKolom(naam) {
   return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(naam);
 }
 
+// ISO 8601 ('2024-07-08T17:25:33.123Z') → MySQL datetime ('2024-07-08 17:25:33')
+function normaliseerWaarde(val) {
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+    return val.slice(0, 19).replace('T', ' ');
+  }
+  return val;
+}
+
 // ── Query-parameter → WHERE-clausule ───────────────────────────────────────
 function buildWhere(params) {
   const conditions = [];
@@ -161,7 +169,7 @@ router.post('/:tabel', async (req, res) => {
       if (!rij || Object.keys(rij).length === 0) continue;
       const kolommen     = Object.keys(rij).map(c => `\`${c}\``).join(', ');
       const placeholders = Object.keys(rij).map(() => '?').join(', ');
-      const waarden      = Object.values(rij);
+      const waarden      = Object.values(rij).map(normaliseerWaarde);
 
       const [result] = await db.query(
         `INSERT INTO \`${tabel}\` (${kolommen}) VALUES (${placeholders})`,
@@ -210,7 +218,7 @@ router.patch('/:tabel', async (req, res) => {
   }
 
   const setCols   = Object.keys(body).map(c => `\`${c}\` = ?`).join(', ');
-  const setValues = Object.values(body);
+  const setValues = Object.values(body).map(normaliseerWaarde);
 
   try {
     await db.query(`UPDATE \`${tabel}\` SET ${setCols} ${where}`, [...setValues, ...whereValues]);
@@ -270,7 +278,7 @@ router.post('/:tabel/upsert', async (req, res) => {
         .filter(c => c !== 'id')
         .map(c => `\`${c}\` = VALUES(\`${c}\`)`)
         .join(', ');
-      const waarden = Object.values(rij);
+      const waarden = Object.values(rij).map(normaliseerWaarde);
 
       await db.query(
         `INSERT INTO \`${tabel}\` (${kolommen}) VALUES (${placeholders})

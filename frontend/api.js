@@ -8,32 +8,57 @@
  * API_BASE_URL wordt geladen vanuit config.js (moet vóór dit script staan).
  */
 
+// ── Module-level token — één centrale plek, geen closure-problemen ────────────
+let _huidigToken = localStorage.getItem('wplaats_token') || null;
+
+function _getToken() { return _huidigToken; }
+function _setToken(t) {
+  _huidigToken = t || null;
+  if (t) localStorage.setItem('wplaats_token', t);
+  else   localStorage.removeItem('wplaats_token');
+}
+
+// MySQL geeft integer-IDs; de app vergelijkt met strings (onclick="fn('${r.id}')").
+// Converteer alle `id` en `*_id` velden naar string zodat === overal werkt.
+function _normaliseerIds(v) {
+  if (Array.isArray(v)) return v.map(_normaliseerIds);
+  if (v !== null && typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      out[k] = (k === 'id' || k.endsWith('_id')) && typeof val === 'number'
+        ? String(val)
+        : _normaliseerIds(val);
+    }
+    return out;
+  }
+  return v;
+}
+
 // ── QueryBuilder ─────────────────────────────────────────────────────────────
 class QueryBuilder {
-  constructor(baseUrl, tabel, getToken) {
-    this._base     = baseUrl;
-    this._tabel    = tabel;
-    this._token    = getToken;
-    this._params   = {};
-    this._method   = 'GET';
-    this._body     = null;
-    this._single   = false;
-    this._upsert   = false;
+  constructor(baseUrl, tabel) {
+    this._base       = baseUrl;
+    this._tabel      = tabel;
+    this._params     = {};
+    this._method     = 'GET';
+    this._body       = null;
+    this._single     = false;
+    this._maybeSingle = false;
+    this._upsert     = false;
   }
 
   // Selecteer kolommen
   select(cols = '*') {
-    if (this._method === 'GET') this._params.select = cols;
-    else this._params.select = cols; // voor insert(...).select()
+    this._params.select = cols;
     return this;
   }
 
-  // Filter: WHERE kolom = waarde
-  eq(col, val)              { this._params[`eq_${col}`]   = val;          return this; }
-  neq(col, val)             { this._params[`neq_${col}`]  = val;          return this; }
-  gte(col, val)             { this._params[`gte_${col}`]  = val;          return this; }
-  lte(col, val)             { this._params[`lte_${col}`]  = val;          return this; }
-  ilike(col, val)           { this._params[`ilike_${col}`] = val.replace(/%/g, ''); return this; }
+  // Filters
+  eq(col, val)    { this._params[`eq_${col}`]    = val;                         return this; }
+  neq(col, val)   { this._params[`neq_${col}`]   = val;                         return this; }
+  gte(col, val)   { this._params[`gte_${col}`]   = val;                         return this; }
+  lte(col, val)   { this._params[`lte_${col}`]   = val;                         return this; }
+  ilike(col, val) { this._params[`ilike_${col}`] = val.replace(/%/g, '');       return this; }
 
   is(col, val) {
     this._params[`is_${col}`] = val === null ? 'null' : val;
@@ -41,7 +66,6 @@ class QueryBuilder {
   }
 
   not(col, op, val) {
-    // Supabase: .not('artikelcode', 'is', null) → IS NOT NULL
     if (op === 'is' && val === null) {
       this._params[`not_null_${col}`] = '1';
     } else {
@@ -64,32 +88,22 @@ class QueryBuilder {
 
   limit(n)  { this._params.limit  = n; return this; }
   offset(n) { this._params.offset = n; return this; }
-  single()  { this._single = true;     return this; }
+
+  // Paginering: range(van, tot) → limit + offset
+  range(van, tot) {
+    this._params.limit  = tot - van + 1;
+    this._params.offset = van;
+    return this;
+  }
+
+  single()      { this._single      = true; return this; }
+  maybeSingle() { this._maybeSingle = true; return this; }
 
   // Mutaties
-  insert(data) {
-    this._method = 'POST';
-    this._body   = data;
-    return this;
-  }
-
-  update(data) {
-    this._method = 'PATCH';
-    this._body   = data;
-    return this;
-  }
-
-  upsert(data) {
-    this._method = 'POST';
-    this._upsert = true;
-    this._body   = Array.isArray(data) ? data : [data];
-    return this;
-  }
-
-  delete() {
-    this._method = 'DELETE';
-    return this;
-  }
+  insert(data) { this._method = 'POST';   this._body = data;                              return this; }
+  update(data) { this._method = 'PATCH';  this._body = data;                              return this; }
+  upsert(data) { this._method = 'POST';   this._upsert = true; this._body = Array.isArray(data) ? data : [data]; return this; }
+  delete()     { this._method = 'DELETE';                                                 return this; }
 
   // Thenable: await sb.from('...').select('*')
   then(resolve, reject) {
@@ -97,12 +111,14 @@ class QueryBuilder {
   }
 
   async _uitvoeren() {
+    const token = _getToken();
     const headers = {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${this._token()}`,
+      'Authorization': `Bearer ${token}`,
     };
 
-    if (this._single) this._params.single = '1';
+    if (this._single)      this._params.single = '1';
+    if (this._maybeSingle) this._params.single = '1';
 
     let pad = `${this._base}/${this._tabel}`;
     if (this._upsert) pad += '/upsert';
@@ -115,7 +131,16 @@ class QueryBuilder {
 
     try {
       const res  = await fetch(fullUrl, opties);
+
+      // maybeSingle: geen rij gevonden is geen fout
+      if (this._maybeSingle && res.status === 406) {
+        return { data: null, error: null };
+      }
+
       const json = await res.json();
+      // MySQL geeft integer-IDs terug; de app vergelijkt altijd als string
+      // (onclick="fn('${r.id}')"). Normaliseer hier zodat === overal werkt.
+      if (json.data != null) json.data = _normaliseerIds(json.data);
       return json;
     } catch (err) {
       return { data: null, error: err.message };
@@ -125,10 +150,9 @@ class QueryBuilder {
 
 // ── ChannelBuilder (SSE-realtime) ────────────────────────────────────────────
 class ChannelBuilder {
-  constructor(baseUrl, kanaal, getToken) {
+  constructor(baseUrl, kanaal) {
     this._base    = baseUrl;
     this._kanaal  = kanaal;
-    this._token   = getToken;
     this._luisteraars = [];
     this._sse     = null;
   }
@@ -142,7 +166,8 @@ class ChannelBuilder {
     const url = `${this._base}/realtime/subscribe/${encodeURIComponent(this._kanaal)}`;
 
     const verbind = () => {
-      this._sse = new EventSource(`${url}?token=${encodeURIComponent(this._token())}`);
+      const tok = _getToken();
+      this._sse = new EventSource(`${url}?token=${encodeURIComponent(tok)}`);
 
       this._sse.onopen = () => {
         if (statusCallback) statusCallback('SUBSCRIBED');
@@ -157,12 +182,18 @@ class ChannelBuilder {
 
       this._sse.onerror = () => {
         this._sse.close();
-        // Herverbind na 3 seconden
         setTimeout(verbind, 3000);
       };
     };
 
-    verbind();
+    // Pas verbinden als token beschikbaar is
+    if (_getToken()) {
+      verbind();
+    } else {
+      const wacht = setInterval(() => {
+        if (_getToken()) { clearInterval(wacht); verbind(); }
+      }, 500);
+    }
     return this;
   }
 
@@ -177,8 +208,7 @@ class ChannelBuilder {
 // ── ApiClient (vervangt `createClient` van Supabase) ────────────────────────
 class ApiClient {
   constructor(baseUrl) {
-    this._base  = baseUrl;
-    this._token = null;
+    this._base = baseUrl;
 
     this.auth = {
       // Inloggen: POST /api/auth/login
@@ -192,8 +222,7 @@ class ApiClient {
           const json = await res.json();
 
           if (json.token) {
-            this._token = json.token;
-            localStorage.setItem('wplaats_token',   json.token);
+            _setToken(json.token);
             localStorage.setItem('wplaats_monteur', JSON.stringify(json.monteur));
             return { data: { user: json.monteur }, error: null };
           }
@@ -208,18 +237,24 @@ class ApiClient {
         const token   = localStorage.getItem('wplaats_token');
         const monteur = JSON.parse(localStorage.getItem('wplaats_monteur') || 'null');
         if (token && monteur) {
-          this._token = token;
-          // Zorg dat auth_user_id gelijk is aan id zodat verwerkSessie werkt
+          _setToken(token);
           if (!monteur.auth_user_id) monteur.auth_user_id = monteur.id;
           return { data: { session: { user: monteur } } };
         }
         return { data: { session: null } };
       },
 
+      // Huidige ingelogde gebruiker
+      getUser: () => {
+        const monteur = JSON.parse(localStorage.getItem('wplaats_monteur') || 'null');
+        if (!monteur || !_getToken()) return { data: { user: null } };
+        if (!monteur.auth_user_id) monteur.auth_user_id = monteur.id;
+        return { data: { user: monteur } };
+      },
+
       // Uitloggen
       signOut: async () => {
-        this._token = null;
-        localStorage.removeItem('wplaats_token');
+        _setToken(null);
         localStorage.removeItem('wplaats_monteur');
         return { error: null };
       },
@@ -227,17 +262,16 @@ class ApiClient {
   }
 
   from(tabel) {
-    return new QueryBuilder(this._base, tabel, () => this._token);
+    return new QueryBuilder(this._base, tabel);
   }
 
   channel(naam) {
-    return new ChannelBuilder(this._base, naam, () => this._token);
+    return new ChannelBuilder(this._base, naam);
   }
 
   // Supabase Storage vervangen door eigen upload-endpoint
   get storage() {
-    const base  = this._base;
-    const token = () => this._token;
+    const base = this._base;
     return {
       from: (bucket) => ({
         upload: async (pad, bestand) => {
@@ -245,7 +279,7 @@ class ApiClient {
           form.append('file', bestand, pad);
           const res  = await fetch(`${base}/upload/${bucket}`, {
             method:  'POST',
-            headers: { 'Authorization': `Bearer ${token()}` },
+            headers: { 'Authorization': `Bearer ${_getToken()}` },
             body:    form,
           });
           return res.json();
@@ -261,7 +295,3 @@ class ApiClient {
 // ── Initialiseer de client ────────────────────────────────────────────────────
 // API_BASE_URL wordt gezet in config.js (bijv. 'http://localhost:3000/api')
 const sb = new ApiClient(typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '/api');
-
-// Herstel token uit vorige sessie
-const _opgeslagenToken = localStorage.getItem('wplaats_token');
-if (_opgeslagenToken) sb._token = _opgeslagenToken;
