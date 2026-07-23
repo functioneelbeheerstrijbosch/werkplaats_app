@@ -11,18 +11,18 @@
     "bcrypt": "5.1.1",
     "cors": "2.8.5",
     "dotenv": "16.4.5",
-    "express": "^4.22.2",
-    "express-rate-limit": "^8.6.0",
-    "helmet": "^8.3.0",
+    "express": "4.22.2",
+    "express-rate-limit": "8.6.0",
+    "helmet": "8.3.0",
     "jsonwebtoken": "9.0.2",
     "mssql": "11.0.1",
     "multer": "1.4.5-lts.1",
-    "mysql2": "^3.23.1"
+    "mysql2": "3.23.1"
   },
   "devDependencies": {
     "nodemon": "3.1.0"
   },
   "overrides": {
-    "tar": "^7.5.19"
+    "tar": "7.5.19"
   }
 }
