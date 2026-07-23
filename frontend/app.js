@@ -145,9 +145,7 @@ function setupRealtime() {
       clearTimeout(_realtimeHerlaadTimer);
       _realtimeHerlaadTimer = setTimeout(() => laadReparaties(), 400);
     })
-    .subscribe((status) => {
-      console.log('Realtime status:', status);
-    });
+    .subscribe();
 }
 
 // ── DEMO DATA ─────────────────────────────────────────────────
@@ -2777,7 +2775,6 @@ async function toggleTagHistorie(prefix) {
         .order('aangemaakt_op', { ascending: false })
         .limit(30);
       if (error) console.error('Tagnummer memo fout:', error);
-      console.log('Tagnummer logs voor', r.tagnummer, ':', data?.length ?? 0, data);
       logs = data || [];
     } catch(e) { console.error(e); logs = []; }
   }

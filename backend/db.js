@@ -12,6 +12,7 @@ const pool = mysql.createPool({
   connectionLimit:  10,
   timezone:         '+00:00',
   dateStrings:      true,
+  ssl:              { rejectUnauthorized: false },
 });
 
 // ISO 8601 ('2024-07-08T17:25:33.123Z') → MySQL datetime ('2024-07-08 17:25:33')

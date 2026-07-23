@@ -38,9 +38,16 @@ const TABEL_KANAAL = {
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
+// Alleen foto's (bug-screenshots) en geluidsopnames (reparatie-geluid) toestaan —
+// voorkomt dat willekeurige bestandstypes (bv. .html/.svg met script) worden
+// geüpload en vervolgens vanaf hetzelfde origin teruggeserveerd.
 const upload = multer({
   dest: uploadDir,
   limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const toegestaan = file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/');
+    cb(toegestaan ? null : new Error('Alleen afbeeldingen en geluidsopnames zijn toegestaan'), toegestaan);
+  },
 });
 
 // Kolomnamen mogen alleen letters, cijfers en underscores bevatten
@@ -296,7 +303,12 @@ router.post('/:tabel/upsert', async (req, res) => {
 
 // ── POST /api/upload/:bucket ─────────────────────────────────────────────────
 // Vervangt Supabase Storage uploads (bug-screenshots, reparatie-geluiden)
-router.post('/upload/:bucket', upload.single('file'), (req, res) => {
+router.post('/upload/:bucket', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Geen bestand ontvangen' });
 
   const ext      = path.extname(req.file.originalname);

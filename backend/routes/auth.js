@@ -3,6 +3,7 @@ const db     = require('../db');
 const jwt    = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const authMiddleware = require('../middleware/auth');
+const { logAudit } = require('../auditLog');
 
 // POST /api/auth/login
 // Body: { email, password }
@@ -15,8 +16,6 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // TODO: pas de kolomnamen aan op jouw MySQL-tabel als ze anders heten.
-    // Verwacht: monteurs.email, monteurs.wachtwoord_hash, monteurs.actief
     const [rows] = await db.query(
       'SELECT * FROM monteurs WHERE email = ? AND actief = 1 LIMIT 1',
       [email]
@@ -33,7 +32,13 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: monteur.id, email: monteur.email, naam: monteur.naam, is_admin: !!monteur.is_admin },
+      {
+        id:                  monteur.id,
+        email:               monteur.email,
+        naam:                monteur.naam,
+        is_admin:            !!monteur.is_admin,
+        werkplaats_planning: !!monteur.werkplaats_planning,
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -61,6 +66,7 @@ router.post('/wachtwoord-instellen', authMiddleware, async (req, res) => {
   try {
     const hash = await bcrypt.hash(wachtwoord, 12);
     await db.query('UPDATE monteurs SET wachtwoord_hash = ? WHERE id = ?', [hash, monteur_id]);
+    logAudit({ monteurId: req.user.id, actie: 'wachtwoord_reset', doelMonteurId: monteur_id });
     res.json({ ok: true });
   } catch (err) {
     console.error('[auth/wachtwoord-instellen]', err);
