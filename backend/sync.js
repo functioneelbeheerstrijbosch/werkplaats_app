@@ -183,6 +183,11 @@ async function eenSync() {
 }
 
 function startSync() {
+  if (process.env.SYNC_ENABLED === 'false') {
+    console.warn('[SYNC] Uitgeschakeld via SYNC_ENABLED=false in .env — geen MSSQL- of API-sync gestart.');
+    return;
+  }
+
   if (!MSSQL_CONFIG.server || !MSSQL_CONFIG.database) {
     console.warn('[SYNC] MSSQL_SERVER of MSSQL_DATABASE niet ingesteld — sync uitgeschakeld.');
   } else {
@@ -219,6 +224,7 @@ const API_KOLOM_MAPPING = {
   organisatie:             'organisatie',
   landcode:                'landcode',
   memogeschiedenis:        'memogeschiedenis',
+  opmerking:               'klacht',
   magazijnlocatie:         'magazijnlocatie',
   reden_datum:             'reden_datum',
   uiterste_datum_afdeling: 'uiterste_datum_afdeling',

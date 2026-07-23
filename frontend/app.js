@@ -39,7 +39,6 @@ async function haalLatLng(postcode, landcode) {
     .from('postcodes')
     .select('lat, lng')
     .eq('postcode', pc)
-    .eq('landcode', lc)
     .maybeSingle();
 
   const resultaat = (!error && data) ? { lat: +data.lat, lng: +data.lng } : null;

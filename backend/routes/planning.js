@@ -54,7 +54,7 @@ router.get('/monteurs', async (req, res) => {
 
 router.patch('/monteurs/:id', async (req, res) => {
   try {
-    const toegestaan = ['is_admin','is_onderdelenbeheerder','werkplaats_toegang','witgoed_toegang','witgoed_voorraadbeheer','locatie_aanpassen','werkvoorbereider','productieplanning','werkplaats_planning'];
+    const toegestaan = ['is_admin','is_onderdelenbeheerder','werkplaats_toegang','witgoed_toegang','witgoed_voorraadbeheer','locatie_aanpassen','werkvoorbereider','werkplaats_planning','productieplanning'];
     const velden = Object.fromEntries(Object.entries(req.body).filter(([k]) => toegestaan.includes(k)));
     if (!Object.keys(velden).length) return res.status(400).json({ error: 'Geen geldige velden' });
     const cols = Object.keys(velden).map(k => `\`${k}\` = ?`).join(', ');

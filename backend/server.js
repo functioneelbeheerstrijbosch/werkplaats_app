@@ -102,6 +102,7 @@ app.post('/api/sync/importeer', authMiddleware, async (req, res) => {
     organisatie:             'organisatie',
     landcode:                'landcode',
     memogeschiedenis:        'memogeschiedenis',
+    opmerking:               'klacht',
     magazijnlocatie:         'magazijnlocatie',
     reden_datum:             'reden_datum',
     uiterste_datum_afdeling: 'uiterste_datum_afdeling',

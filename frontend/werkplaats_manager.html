@@ -1012,6 +1012,23 @@ function esc(s) {
 // `sb` (auth + realtime channels) komt uit api.js. Planningdata loopt via de
 // gedeicieerde /api/planning/* routes (permissiegate op werkplaats_planning),
 // niet via de generieke sb.from(tabel) laag.
+// MySQL geeft integer-IDs terug; de app vergelijkt ids overal als string
+// (bv. onclick="fn('${r.id}')" wordt altijd een string-literal). Normaliseer
+// hier zodat === overal klopt — zelfde patroon als _normaliseerIds in api.js.
+function _normaliseerPlanningIds(v) {
+  if (Array.isArray(v)) return v.map(_normaliseerPlanningIds);
+  if (v !== null && typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      out[k] = (k === 'id' || k.endsWith('_id')) && typeof val === 'number'
+        ? String(val)
+        : _normaliseerPlanningIds(val);
+    }
+    return out;
+  }
+  return v;
+}
+
 async function planningFetch(pad, opties = {}) {
   const token = localStorage.getItem('wplaats_token');
   const res = await fetch(`${API_BASE_URL}/planning${pad}`, {
@@ -1021,7 +1038,7 @@ async function planningFetch(pad, opties = {}) {
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-  return json;
+  return _normaliseerPlanningIds(json);
 }
 
 let alleReparaties  = [];
@@ -2044,7 +2061,7 @@ function laadFunctiebeheer() {
         const aan = !!(m[k.kolom]);
         return `<td style="text-align:center">
           <button class="fb-toggle ${aan ? 'aan' : 'uit'}"
-            onclick="fbToggle('${m.id.replace(/'/g,"\\'")}','${k.kolom}',this)"
+            onclick="fbToggle('${String(m.id).replace(/'/g,"\\'")}','${k.kolom}',this)"
             title="${k.label}: ${aan ? 'Aan' : 'Uit'}">
           </button>
         </td>`;
