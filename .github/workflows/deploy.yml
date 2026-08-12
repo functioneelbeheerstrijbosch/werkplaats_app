@@ -31,8 +31,8 @@ jobs:
       - name: Deploy backend
         shell: powershell
         run: |
-          $source = "${{ github.workspace }}\api"
-          $destination = "${{ secrets.IIS_PATH }}\api"
+          $source = "${{ github.workspace }}\backend"
+          $destination = "${{ secrets.IIS_PATH }}\backend"
 
           robocopy $source $destination /E /XD "node_modules"
 
@@ -45,7 +45,7 @@ jobs:
       - name: Install backend dependencies
         shell: powershell
         run: |
-          cd "${{ secrets.IIS_PATH }}\api"
+          cd "${{ secrets.IIS_PATH }}\backend"
 
           npm i
 
