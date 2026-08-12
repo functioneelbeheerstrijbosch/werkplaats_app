@@ -1,1 +1,16 @@
 config.js
+
+# Omgevingsvariabelen — nooit in git
+.env
+backend/.env
+
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Gebruikersuploads (foto's, geluidsopnames, screenshots) — nooit in git
+backend/uploads/
+
+# Interne documentatie/audit — niet voor in de repo, wel lokaal bijhouden
+internal-docs/
+>>>>>>> origin/develop
