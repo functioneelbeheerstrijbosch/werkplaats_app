@@ -10,19 +10,52 @@ jobs:
     runs-on: self-hosted
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Deploy source files
+      - name: Deploy frontend
         shell: powershell
         run: |
-          $source = "${{ github.workspace }}"
+          $source = "${{ github.workspace }}\frontend"
           $destination = "${{ secrets.IIS_PATH }}"
 
-          robocopy $source $destination /MIR /XD ".git" ".github"
+          robocopy $source $destination /E /XD ".git" ".github"
 
           if ($LASTEXITCODE -gt 7) {
               exit $LASTEXITCODE
           }
 
           exit 0
+
+      - name: Deploy backend
+        shell: powershell
+        run: |
+          $source = "${{ github.workspace }}\api"
+          $destination = "${{ secrets.IIS_PATH }}\api"
+
+          robocopy $source $destination /E /XD "node_modules"
+
+          if ($LASTEXITCODE -gt 7) {
+              exit $LASTEXITCODE
+          }
+
+          exit 0
+
+      - name: Install backend dependencies
+        shell: powershell
+        run: |
+          cd "${{ secrets.IIS_PATH }}\api"
+
+          npm i
+
+      - name: Restart backend
+        shell: powershell
+        run: |
+          Restart-Service "StrijboschAPI"
+
+          $service = Get-Service "StrijboschAPI"
+
+          if ($service.Status -ne "Running") {
+              throw "StrijboschAPI failed to start."
+          }
