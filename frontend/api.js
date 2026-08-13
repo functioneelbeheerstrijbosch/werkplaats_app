@@ -223,8 +223,12 @@ class ApiClient {
 
           if (json.token) {
             _setToken(json.token);
-            localStorage.setItem('wplaats_monteur', JSON.stringify(json.monteur));
-            return { data: { user: json.monteur }, error: null };
+            // MySQL geeft integer-ids terug; net als bij .from()-resultaten
+            // normaliseren naar strings zodat === overal klopt (bv.
+            // r.monteur_id === state.monteur.id in app.js).
+            const monteur = _normaliseerIds(json.monteur);
+            localStorage.setItem('wplaats_monteur', JSON.stringify(monteur));
+            return { data: { user: monteur }, error: null };
           }
           return { data: null, error: { message: json.error } };
         } catch (err) {
@@ -235,7 +239,7 @@ class ApiClient {
       // Sessie controleren (vanuit localStorage)
       getSession: () => {
         const token   = localStorage.getItem('wplaats_token');
-        const monteur = JSON.parse(localStorage.getItem('wplaats_monteur') || 'null');
+        const monteur = _normaliseerIds(JSON.parse(localStorage.getItem('wplaats_monteur') || 'null'));
         if (token && monteur) {
           _setToken(token);
           if (!monteur.auth_user_id) monteur.auth_user_id = monteur.id;
@@ -246,7 +250,7 @@ class ApiClient {
 
       // Huidige ingelogde gebruiker
       getUser: () => {
-        const monteur = JSON.parse(localStorage.getItem('wplaats_monteur') || 'null');
+        const monteur = _normaliseerIds(JSON.parse(localStorage.getItem('wplaats_monteur') || 'null'));
         if (!monteur || !_getToken()) return { data: { user: null } };
         if (!monteur.auth_user_id) monteur.auth_user_id = monteur.id;
         return { data: { user: monteur } };

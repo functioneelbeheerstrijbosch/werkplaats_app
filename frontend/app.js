@@ -1104,10 +1104,11 @@ function groepCardHTML(regels, mijnId, modus, logs) {
       </div>
     </div>` : '';
 
-  const opmSectieHTML = heeftKlacht ? `
+  const mijnRegelId = (werkRegels.find(r => r.monteur_id === mijnId) || {}).id;
+  const opmSectieHTML = (heeftKlacht || modus === 'behandeling') ? `
     <div class="groep-extra-sectie" id="opm-sectie-${groepId}" style="display:none">
-      <div class="groep-extra-label">Opmerking / klacht</div>
-      <div>${esc(hoofd.klacht)}</div>
+      ${heeftKlacht ? `<div class="groep-extra-label">Opmerking / klacht</div><div>${esc(hoofd.klacht)}</div>` : ''}
+      ${modus === 'behandeling' ? `<div id="opm-lijst-${groepId}" style="margin-top:${heeftKlacht ? '10px' : '0'};display:flex;flex-direction:column;gap:6px"></div>` : ''}
     </div>` : '';
 
   const isRepOpdracht = (hoofd.opdrachtnr || '').toUpperCase().startsWith('REP') || (hoofd.opdrachtcode || '').toUpperCase().startsWith('REP');
@@ -1133,10 +1134,13 @@ function groepCardHTML(regels, mijnId, modus, logs) {
           ${(modus === 'open' || modus === 'behandeling') && hoofd.landcode ? `<span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:1px 5px;white-space:nowrap">${esc(hoofd.landcode)}</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-          ${heeftKlacht ? `<button class="groep-icon-btn" id="opm-btn-${groepId}" title="Opmerking / klacht" onclick="event.stopPropagation();toggleGroepSectie('opm-sectie-${groepId}','opm-btn-${groepId}')">
+          ${(heeftKlacht || modus === 'behandeling') ? `<button class="groep-icon-btn" id="opm-btn-${groepId}" title="Opmerking / klacht" onclick="event.stopPropagation();toggleGroepSectie('opm-sectie-${groepId}','opm-btn-${groepId}');${modus === 'behandeling' ? `laadOpmerkingenInline('${groepId}','${mijnRegelId}')` : ''}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </button>` : ''}
           ${modus === 'behandeling' ? maakTimerKnopHeader(werkRegels.find(r => r.monteur_id === mijnId)) : ''}
+          ${modus === 'behandeling' ? `<button class="groep-icon-btn" title="Opmerking toevoegen" onclick="event.stopPropagation();openDetail('${mijnRegelId}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>` : ''}
           <span class="groep-chevron" id="chevron-${groepId}">▸</span>
         </div>
       </div>
@@ -3046,14 +3050,12 @@ function toonKeuzeView() {
   document.getElementById('md-keuze').style.display      = '';
   document.getElementById('md-menu').style.display       = 'none';
   document.getElementById('md-onderdelen').style.display = 'none';
-  document.getElementById('md-inkoop').style.display     = 'none';
 }
 
 function toonActiesView() {
   document.getElementById('md-keuze').style.display      = 'none';
   document.getElementById('md-menu').style.display       = '';
   document.getElementById('md-onderdelen').style.display = 'none';
-  document.getElementById('md-inkoop').style.display     = 'none';
   const isVoorraad = state.activeMod?.soort === 'voorraad';
   const vrijgeefBtn = document.querySelector('#md-keuze button[onclick="vrijgevenReparatie()"]');
   if (vrijgeefBtn) vrijgeefBtn.style.display = isVoorraad ? 'none' : '';
@@ -3069,15 +3071,138 @@ function toonActiesView() {
   } else if (verwijderVoorraadBtn) {
     verwijderVoorraadBtn.style.display = isVoorraad ? '' : 'none';
   }
+  laadOpmerkingen();
 }
 
 function toonMenuView() { toonKeuzeView(); } // backwards compat
+
+// ── OPMERKINGEN (bij regels die in behandeling zijn) ────────────
+async function laadOpmerkingen() {
+  const r = state.activeMod;
+  const lijst = document.getElementById('md-opmerkingen-lijst');
+  if (!r || !lijst) return;
+  lijst.innerHTML = '<div style="font-size:12px;color:var(--muted)">Laden…</div>';
+
+  if (state.demoMode) {
+    renderOpmerkingen(r._opmerkingen || []);
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.from('reparatie_logs')
+      .select('id, monteur_naam, notitie, aangemaakt_op')
+      .eq('reparatie_id', r.id)
+      .eq('actie', 'opmerking')
+      .order('aangemaakt_op', { ascending: false });
+    if (error) throw error;
+    renderOpmerkingen(data || []);
+  } catch (e) {
+    lijst.innerHTML = '<div style="font-size:12px;color:var(--danger)">Kon opmerkingen niet laden.</div>';
+  }
+}
+
+// Bouwt de markup voor een lijst opmerkingen — naam + datum staan altijd bovenaan elke opmerking.
+function opmerkingLijstHTML(logs) {
+  if (!logs.length) {
+    return '<div style="font-size:12px;color:var(--muted)">Nog geen opmerkingen.</div>';
+  }
+  return logs.map(l => {
+    const datum = new Date(l.aangemaakt_op).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit' });
+    const tijd  = new Date(l.aangemaakt_op).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div style="padding:7px 10px;background:rgba(245,166,35,.1);border-left:3px solid #f5a623;border-radius:0 var(--r) var(--r) 0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span style="font-size:12px;font-weight:700;color:#f5a623">${esc(l.monteur_naam || 'Onbekend')}</span>
+          <span style="font-size:11px;color:var(--muted);white-space:nowrap">${datum} ${tijd}</span>
+        </div>
+        <div style="font-size:13px;color:var(--text);margin-top:2px;white-space:pre-wrap">${esc(l.notitie)}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderOpmerkingen(logs) {
+  const lijst = document.getElementById('md-opmerkingen-lijst');
+  if (!lijst) return;
+  lijst.innerHTML = opmerkingLijstHTML(logs);
+}
+
+// Toont de opmerkingen direct in de kaart zelf (naast klacht-icoon), zonder de
+// detailmodal te hoeven openen. Wordt maar één keer per kaart-weergave opgehaald.
+const _opmInlineCache = {};
+async function laadOpmerkingenInline(groepId, regelId) {
+  const lijst = document.getElementById('opm-lijst-' + groepId);
+  if (!lijst || !regelId || regelId === 'undefined') return;
+
+  if (_opmInlineCache[regelId]) {
+    lijst.innerHTML = opmerkingLijstHTML(_opmInlineCache[regelId]);
+    return;
+  }
+  lijst.innerHTML = '<div style="font-size:12px;color:var(--muted)">Laden…</div>';
+
+  if (state.demoMode) {
+    const r = state.reparaties.find(x => x.id === regelId);
+    const logs = r?._opmerkingen || [];
+    _opmInlineCache[regelId] = logs;
+    lijst.innerHTML = opmerkingLijstHTML(logs);
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.from('reparatie_logs')
+      .select('id, monteur_naam, notitie, aangemaakt_op')
+      .eq('reparatie_id', regelId)
+      .eq('actie', 'opmerking')
+      .order('aangemaakt_op', { ascending: false });
+    if (error) throw error;
+    _opmInlineCache[regelId] = data || [];
+    lijst.innerHTML = opmerkingLijstHTML(data || []);
+  } catch (e) {
+    lijst.innerHTML = '<div style="font-size:12px;color:var(--danger)">Kon opmerkingen niet laden.</div>';
+  }
+}
+
+async function voegOpmerkingToe() {
+  const r    = state.activeMod;
+  const veld = document.getElementById('md-opmerking-tekst');
+  const tekst = veld?.value.trim();
+  if (!r || !tekst) return;
+
+  const nu = new Date().toISOString();
+  const nieuw = {
+    reparatie_id: r.id,
+    opdrachtnr:   r.opdrachtnr,
+    monteur_id:   state.monteur.id,
+    monteur_naam: state.monteur.naam,
+    actie:        'opmerking',
+    notitie:      tekst,
+    aangemaakt_op: nu,
+  };
+
+  if (state.demoMode) {
+    r._opmerkingen = [nieuw, ...(r._opmerkingen || [])];
+    veld.value = '';
+    renderOpmerkingen(r._opmerkingen);
+    delete _opmInlineCache[r.id];
+    return;
+  }
+
+  veld.disabled = true;
+  try {
+    await insertLog(nieuw);
+    veld.value = '';
+    delete _opmInlineCache[r.id]; // kaartweergave haalt verse data op bij volgende keer openklappen
+    await laadOpmerkingen();
+    toast('✓ Opmerking toegevoegd');
+  } catch (e) {
+    toast('Fout bij opslaan: ' + e.message);
+  }
+  veld.disabled = false;
+}
 
 function toonOnderdelenView() {
   document.getElementById('md-keuze').style.display      = 'none';
   document.getElementById('md-menu').style.display       = 'none';
   document.getElementById('md-onderdelen').style.display = '';
-  document.getElementById('md-inkoop').style.display     = 'none';
   document.getElementById('md-zoek').value = '';
   filterOnderdelenDetail();
 }
@@ -3616,9 +3741,47 @@ function _openTagnrScherm() {
   document.getElementById('tagnr-input').value = '';
   document.getElementById('tagnr-error').style.display = 'none';
   document.getElementById('tagnr-reeks-paneel').style.display = 'none';
+  const vorigeBtn = document.getElementById('tagnr-vorige-btn');
+  if (vorigeBtn) vorigeBtn.style.display = _tagnrQueueIdx > 0 ? '' : 'none';
   _renderTagnrLijst(item, gescand);
   document.getElementById('scherm-tagnr').classList.add('open');
   setTimeout(() => document.getElementById('tagnr-input')?.focus(), 80);
+}
+
+// Terug naar het vorige artikel in de scan-queue (bv. om een tagnummer nog aan
+// te passen) — al ingevoerde tagnummers per artikel blijven staan in _tagnrGescand.
+function vorigeTagnrRegel() {
+  if (_tagnrQueueIdx <= 0) return;
+  _tagnrQueueIdx--;
+  _openTagnrScherm();
+}
+
+// Kruisje: annuleer de scan-queue. Artikelen die al volledig gescand zijn worden
+// alsnog afgerond/opgeslagen (via de bestaande _tagnrOnDone-flow, desnoods beperkt
+// tot die subset via bulkAfrondIds) — nog niet voltooide artikelen worden overgeslagen
+// en moeten later apart afgerond worden.
+function annuleerTagnrScherm() {
+  const voltooideIds = _tagnrQueue
+    .filter(it => (_tagnrGescand.get(it.id) || []).length >= it.aantal)
+    .map(it => it.id);
+  const totaal = _tagnrQueue.length;
+
+  const vraag = voltooideIds.length
+    ? `Je hebt ${voltooideIds.length} van de ${totaal} artikel${totaal !== 1 ? 'en' : ''} volledig gescand. Wil je die opslaan? Nog niet voltooide artikelen worden dan overgeslagen — die kun je later apart afronden.`
+    : 'Er is nog geen enkel artikel volledig gescand. Weet je zeker dat je wilt annuleren? Er wordt dan niets opgeslagen.';
+  if (!confirm(vraag)) return;
+
+  document.getElementById('scherm-tagnr').classList.remove('open');
+  const cb = _tagnrOnDone;
+  _tagnrOnDone   = null;
+  _tagnrQueue    = [];
+  _tagnrQueueIdx = 0;
+  _tagnrGescand  = new Map();
+
+  if (!voltooideIds.length) return; // niets af te ronden, klaar
+
+  bulkAfrondIds = voltooideIds; // beperkt eventuele bulk-afronden-flow tot de voltooide subset
+  cb?.();
 }
 
 function _renderTagnrLijst(item, gescand) {
