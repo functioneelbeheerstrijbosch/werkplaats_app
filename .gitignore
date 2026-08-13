@@ -1,4 +1,5 @@
 config.js
+frontend/config.js
 
 # Omgevingsvariabelen — nooit in git
 .env
