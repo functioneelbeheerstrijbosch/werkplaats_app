@@ -1,5 +1,5 @@
 // ── Werkplaats Service Worker ──────────────────────────────────
-const CACHE_NAAM = 'werkplaats-v5';
+const CACHE_NAAM = 'werkplaats-v6';
 
 // Bestanden die offline beschikbaar moeten zijn.
 // Let op: icon-192.png/icon-512.png bestaan niet (meer) op de server —
@@ -44,6 +44,8 @@ self.addEventListener('fetch', (e) => {
     url.endsWith('.js') ||
     url.endsWith('.css') ||
     url.includes('.js?') ||
+    url.includes('/api/') ||           // ook op hetzelfde origin (productie) — Cache.put() ondersteunt sowieso alleen GET
+    e.request.method !== 'GET' ||      // extra vangnet: nooit iets anders dan GET proberen te cachen
     url.includes('localhost:3000') ||
     url.includes('127.0.0.1:3000') ||
     url.includes('supabase.co') ||

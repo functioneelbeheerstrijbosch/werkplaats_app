@@ -1415,22 +1415,31 @@ async function vrijgeefRegel(id) {
   if (!r) return;
   if (!confirm(`Regel ${r.opdrachtnr} vrijgeven?`)) return;
 
+  // Onderdelen (N-regels) van dezelfde opdracht die ook door mij geclaimd zijn
+  // moeten mee vrijgegeven worden — anders blijft de opdracht met alleen
+  // onderdelen achter in 'in behandeling'.
+  const nRegels = state.reparaties.filter(x =>
+    x.opdrachtnr === r.opdrachtnr &&
+    x.id !== id &&
+    (x.doorsluizenjn || '').toUpperCase() === 'N' &&
+    x.monteur_id === state.monteur?.id &&
+    !isRegelAfgerond(x)
+  );
+
   if (state.demoMode) {
-    r.status = '445';
-    r.monteur_id = null;
-    r.monteurs = null;
-    r.in_behandeling_op = null;
+    [r, ...nRegels].forEach(x => {
+      x.status = '445';
+      x.monteur_id = null;
+      x.monteurs = null;
+      x.in_behandeling_op = null;
+    });
     renderLists();
     return;
   }
 
   try {
-    await updateReparatieStatus(id, {
-      status: '445',
-      monteur_id: null,
-      toegewezen_door: null,
-      in_behandeling_op: null,
-    });
+    const vrijgeefData = { status: '445', monteur_id: null, toegewezen_door: null, in_behandeling_op: null };
+    await updateReparatieStatus(id, vrijgeefData);
     await insertLog({
       reparatie_id: id,
       monteur_id: state.monteur.id,
@@ -1441,10 +1450,15 @@ async function vrijgeefRegel(id) {
       artikelomschrijving: r.artikelomschrijving,
       notitie: `Regel vrijgegeven door ${state.monteur.naam}`,
     });
-    r.status = '445';
-    r.monteur_id = null;
-    r.monteurs = null;
-    r.in_behandeling_op = null;
+    for (const n of nRegels) {
+      await updateReparatieStatus(n.id, vrijgeefData);
+    }
+    [r, ...nRegels].forEach(x => {
+      x.status = '445';
+      x.monteur_id = null;
+      x.monteurs = null;
+      x.in_behandeling_op = null;
+    });
     renderLists();
   } catch(e) {
     alert('Vrijgeven mislukt: ' + e.message);
@@ -1926,22 +1940,7 @@ async function _openAfrondDirect(id, heropend = false) {
     } catch { /* stil falen */ }
   }
 
-  // Haal eerder toegevoegde onderdelen op uit inkooporders (status = ontvangen)
   afrondOnderdelen = [];
-  if (!state.demoMode) {
-    try {
-      const { data } = await sb.from('inkooporders')
-        .select('id, aantal, onderdelen(naam, artikelnr)')
-        .eq('reparatie_id', r.id)
-        .eq('status', 'ontvangen');
-      if (data) {
-        afrondOnderdelen = data.map(o => ({
-          id: o.id,
-          label: `${o.onderdelen.naam} ×${o.aantal}`,
-        }));
-      }
-    } catch { /* stil falen */ }
-  }
 
   renderAfrondTags();
   vulWerkplaatsTaken(document.getElementById('ma-werkplaats-taken'), r.opdrachtnr);
@@ -2775,6 +2774,7 @@ async function toggleTagHistorie(prefix) {
         .select('opdrachtnr, actie, notitie, gebruikte_onderdelen, bestede_tijd_minuten, monteur_naam, aangemaakt_op')
         .eq('tagnummer', r.tagnummer)
         .neq('actie', 'verwijderd_door_sync')
+        .neq('actie', 'start')
         .order('aangemaakt_op', { ascending: false })
         .limit(30);
       if (error) console.error('Tagnummer memo fout:', error);
