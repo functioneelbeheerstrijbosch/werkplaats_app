@@ -1,12 +1,15 @@
 // ── Werkplaats Service Worker ──────────────────────────────────
-const CACHE_NAAM = 'werkplaats-v4';
+const CACHE_NAAM = 'werkplaats-v5';
 
-// Bestanden die offline beschikbaar moeten zijn
+// Bestanden die offline beschikbaar moeten zijn.
+// Let op: icon-192.png/icon-512.png bestaan niet (meer) op de server —
+// cache.addAll() is alles-of-niets, dus één ontbrekend bestand liet de
+// hele install-stap mislukken ('Failed to execute addAll on Cache').
+// Alleen bestanden opnemen die ook echt bestaan; voeg de icons pas terug
+// toe zodra ze daadwerkelijk gedeployed worden (zie ook manifest.json).
 const CACHE_ASSETS = [
   './werkplaats_app.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
 ];
 
 // ── Installatie: cache de app-shell ───────────────────────────
