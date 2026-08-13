@@ -188,9 +188,14 @@ app.get('/api/sync/preview', authMiddleware, async (_, res) => {
 });
 
 // Beveiligde routes — JWT vereist + algemene rate limit
-app.use('/api', apiLimiter, authMiddleware, apiRoutes);
+// Let op volgorde: specifiekere paden (/api/realtime, /api/planning) staan
+// bewust vóór de generieke '/api'-catch-all. Anders matcht Express die ook
+// op deze aanroepen en lopen ze óók (soms dubbel) door apiLimiter heen —
+// funest voor /api/realtime, dat door langlevende SSE-reconnects juist
+// vaker aangeroepen wordt dan gewone API-calls.
 app.use('/api/realtime', authMiddleware, realtimeRouter);
 app.use('/api/planning', apiLimiter, authMiddleware, planningRoutes);
+app.use('/api', apiLimiter, authMiddleware, apiRoutes);
 
 // Health check
 app.get('/health', (_, res) => {
