@@ -203,15 +203,15 @@ async function signIn() {
 }
 
 async function verwerkSessie(user) {
-  try {
-    const { data: monteur, error } = await sb
-      .from('monteurs').select('*').eq('auth_user_id', user.id).single();
-    if (error || !monteur) throw new Error();
-    kiesMontreur(monteur);
-  } catch {
+  // `user` is al het volledige monteur-record (komt rechtstreeks terug uit
+  // POST /api/auth/login resp. de gecachete sessie) — geen aparte opzoekactie
+  // op auth_user_id meer nodig, dat was een restant uit de oude Supabase-opzet.
+  if (!user) {
     document.getElementById('login-fout').textContent = 'Account niet gekoppeld. Neem contact op met beheer.';
     await sb.auth.signOut();
+    return;
   }
+  kiesMontreur(user);
 }
 
 function kiesMontreur(m) {
