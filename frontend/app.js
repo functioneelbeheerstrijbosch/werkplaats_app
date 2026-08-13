@@ -6114,14 +6114,17 @@ async function exporteerWeekoverzicht() {
 
 // ── SERVICE WORKER (PWA) ──────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Verwijder eerst alle oude SW-registraties zodat cache altijd vers is
-    navigator.serviceWorker.getRegistrations().then(regs => {
-      regs.forEach(r => r.unregister());
-    });
-    navigator.serviceWorker.register('./sw.js').then(reg => {
-      reg.update(); // Forceer controle op nieuwe versie
-    }).catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      // Eerst alle oude SW-registraties verwijderen (en dát ook afwachten,
+      // anders race't dit met de registratie hieronder — zie ook de
+      // 'Failed to update a ServiceWorker ... Not found'-fout die dat gaf).
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+
+      const reg = await navigator.serviceWorker.register('./sw.js');
+      await reg.update(); // Forceer controle op nieuwe versie
+    } catch { /* geen probleem, PWA-installatie is optioneel */ }
   });
 }
 // ── TAALINSTELLING ────────────────────────────────────────────
