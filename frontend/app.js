@@ -941,10 +941,13 @@ function groepCardHTML(regels, mijnId, modus, logs) {
       const vrijgeefOfVerwijder = r.soort === 'voorraad'
         ? `<button class="claim-btn" onclick="event.stopPropagation();verwijderVoorraadReparatie('${r.id}')" style="background:none;color:var(--danger);border:1px solid var(--danger)" title="Verwijderen">🗑</button>`
         : `<button class="claim-btn" onclick="event.stopPropagation();vrijgeefRegel('${r.id}')" style="background:none;color:var(--danger);border:1px solid var(--danger)" title="Vrijgeven">✕</button>`;
+      const wachtOnderdelenKnop = isRepCode(r)
+        ? `<button class="claim-btn" onclick="event.stopPropagation();zetWachtOpOnderdelenRegel('${r.id}')" style="background:none;color:#f5a623;border:1px solid #f5a623" title="Wacht op onderdelen">📦</button>`
+        : '';
       actieHTML = `<div style="display:flex;gap:6px;align-items:center">
         ${historieKnop}
         ${vrijgeefOfVerwijder}
-        <button class="claim-btn" onclick="event.stopPropagation();zetWachtOpOnderdelenRegel('${r.id}')" style="background:none;color:#f5a623;border:1px solid #f5a623" title="Wacht op onderdelen">📦</button>
+        ${wachtOnderdelenKnop}
         <button class="claim-btn" onclick="event.stopPropagation();openAfrond('${r.id}')" style="background:var(--bg3);color:var(--text);border:1px solid var(--border)">Afronden</button>
       </div>`;
     } else if (modus === 'onderdelen') {
@@ -1557,6 +1560,7 @@ let _claimAllesIds = [];
 
 function claimAlles(ids, event, vanuitSelectie) {
   event.stopPropagation();
+  if (!vanuitSelectie) clearSelectie(); // 'volledige opdracht claimen' negeert een eventuele losse selectie elders
   _claimAllesIds = ids;
   const eerste = state.reparaties.find(r => r.id === ids[0]);
   if (!eerste) return;
@@ -1643,6 +1647,7 @@ async function bevestigClaimAlles() {
   else renderLists();
 
   switchTab('behandeling');
+  clearSelectie();
   toast('✓ Hele opdracht geclaimd');
 }
 
@@ -1699,6 +1704,7 @@ function cardHTML(r, type) {
 function openStart(id) {
   const r = state.reparaties.find(x => x.id === id);
   if (!r) return;
+  clearSelectie(); // een losse 'Claimen' op een individuele regel negeert een eventuele selectie elders
   state.activeMod = r;
   document.getElementById('ms-title').textContent  = r.opdrachtnr;
   document.getElementById('ms-sub').textContent    = r.opdrachtcode || r.abonneecode || '';
@@ -1754,6 +1760,8 @@ function openStart(id) {
   resetGeluidUI('ms');
   const msGeluidSectie = document.getElementById('ms-geluid-sectie');
   if (msGeluidSectie) msGeluidSectie.style.display = '';
+  const msWachtOnderdelenBtn = document.getElementById('ms-wacht-onderdelen-btn');
+  if (msWachtOnderdelenBtn) msWachtOnderdelenBtn.style.display = isRepCode(r) ? '' : 'none';
   openModal('modal-start');
 }
 
@@ -1886,6 +1894,8 @@ async function _openAfrondDirect(id, heropend = false) {
   document.getElementById('ma-diagnose').value        = '';
   document.getElementById('ma-notitie').value         = '';
   document.getElementById('ma-onderdeel-extra').value = '';
+  const maDiagnoseSectie = document.getElementById('ma-diagnose-sectie');
+  if (maDiagnoseSectie) maDiagnoseSectie.style.display = isRepCode(r) ? '' : 'none';
   vulRegelChips('ma-regel-chips',    'ma-diagnose', r.opdrachtnr);
   vulRegelChips('ma-notitie-chips',  'ma-notitie',  r.opdrachtnr);
 
@@ -1973,7 +1983,7 @@ async function _openAfrondDirect(id, heropend = false) {
     renderAfrondTagnrLijst();
   } else if (heropend) {
     _afrondTagnrs = [];
-    tagnrSectie.style.display = r.tagnrscannenjn === 'J' ? '' : 'none';
+    tagnrSectie.style.display = vereistTagnummer(r) ? '' : 'none';
     renderAfrondTagnrLijst();
     if (!state.demoMode) {
       sb.from('tagnr_scans').select('tagnr').eq('reparatie_id', r.id)
@@ -2030,7 +2040,6 @@ function openModal(id) {
 
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
-  if (id === 'modal-afrond') stopSpraak();
   if (id === 'modal-start' || id === 'modal-detail') stopGeluid();
   const card = state.activeMod ? document.getElementById('card-'+state.activeMod.id) : null;
   if (card) { card.style.transform = ''; const a = document.getElementById('action-'+state.activeMod.id); if(a) a.style.opacity=0; }
@@ -2070,6 +2079,7 @@ async function startReparatie() {
     }
     renderLists();
     switchTab('behandeling');
+    clearSelectie();
     toast('✓ ' + opdrachtnr + ' opgepakt');
     return;
   }
@@ -2093,6 +2103,7 @@ async function startReparatie() {
     }
     await laadReparaties();
     switchTab('behandeling');
+    clearSelectie();
     toast('✓ ' + opdrachtnr + ' opgepakt');
   } catch(e) {
     toast('Fout: ' + e.message);
@@ -2125,104 +2136,8 @@ async function vrijgevenReparatie() {
   }
 }
 
-// ── SPRAAKHERKENNING ──────────────────────────────────────────
-let spraakRecognition = null;
-let spraakActief      = false;
-let spraakTarget      = { textareaId: 'ma-notitie', btnId: 'spraak-btn', placeholder: 'Omschrijf de uitgevoerde werkzaamheden...' };
-
-function toggleSpraak(textareaId, btnId, placeholder) {
-  if (spraakActief) {
-    stopSpraak();
-  } else {
-    startSpraak(textareaId, btnId, placeholder);
-  }
-}
-
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-function startSpraak(textareaId, btnId, placeholder) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    toast('Spraakherkenning niet beschikbaar in deze browser');
-    return;
-  }
-
-  spraakTarget = {
-    textareaId:  textareaId  || 'ma-notitie',
-    btnId:       btnId       || 'spraak-btn',
-    placeholder: placeholder || 'Omschrijf de uitgevoerde werkzaamheden...',
-  };
-
-  const textarea = document.getElementById(spraakTarget.textareaId);
-  const btn      = document.getElementById(spraakTarget.btnId);
-  const status   = document.getElementById('spraak-status');
-
-  spraakActief = true;
-  btn.classList.add('luistert');
-  btn.title = 'Stop opname';
-  status.textContent = '● Luistert...';
-
-  function maakSessie() {
-    if (!spraakActief) return;
-
-    const rec = new SR();
-    spraakRecognition = rec;
-    rec.lang = 'nl-NL';
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-
-    let interimZin = '';
-
-    rec.onresult = (e) => {
-      interimZin = '';
-      let definitief = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) definitief += t;
-        else interimZin += t;
-      }
-      if (definitief) {
-        const huidig = textarea.value.trimEnd();
-        const spatie = huidig.length > 0 ? ' ' : '';
-        textarea.value = huidig + spatie + definitief.trim();
-        interimZin = '';
-      } else {
-        textarea.placeholder = interimZin;
-      }
-      textarea.scrollTop = textarea.scrollHeight;
-    };
-
-    rec.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      toast('Spraakfout: ' + e.error);
-      stopSpraak();
-    };
-
-    rec.onend = () => {
-      if (!spraakActief) return;
-      if (isIOS) {
-        // Sla eventueel onafgeronde interim-tekst op voordat we stoppen
-        if (interimZin.trim()) {
-          const huidig = textarea.value.trimEnd();
-          const spatie = huidig.length > 0 ? ' ' : '';
-          textarea.value = huidig + spatie + interimZin.trim();
-          textarea.scrollTop = textarea.scrollHeight;
-          interimZin = '';
-        }
-        stopSpraak();
-        toast('Tik opnieuw op de microfoon om verder in te spreken');
-      } else {
-        setTimeout(maakSessie, 100);
-      }
-    };
-
-    try { rec.start(); } catch(e) { /* al bezig, negeer */ }
-  }
-
-  maakSessie();
-}
 
 function resetGeluidUI(prefix) {
   const opname = document.getElementById(prefix + '-geluid-opname');
@@ -2235,19 +2150,11 @@ function stopGeluid() {
   // stub — audio recording niet actief
 }
 
-function stopSpraak() {
-  spraakActief = false;
-  if (spraakRecognition) {
-    spraakRecognition.onend = null; // voorkom herstart
-    try { spraakRecognition.stop(); } catch(e) {}
-    spraakRecognition = null;
-  }
-  const btn      = document.getElementById(spraakTarget.btnId);
-  const status   = document.getElementById('spraak-status');
-  const textarea = document.getElementById(spraakTarget.textareaId);
-  if (btn)      { btn.classList.remove('luistert'); btn.title = 'Inspreken'; }
-  if (status)   status.textContent = '';
-  if (textarea) textarea.placeholder = spraakTarget.placeholder;
+// REP-opdrachten (behalve REPKR/REPPR) — bepaalt zichtbaarheid van het diagnose-veld
+// en de 'wacht op onderdelen'-knop; andere opdrachtcodes hebben dit niet nodig.
+function isRepCode(r) {
+  const code = (r?.opdrachtcode || '').toUpperCase();
+  return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
 }
 
 function isRepUitkomstRegel(r) {
@@ -2428,10 +2335,13 @@ async function openBulkAfrond(ids, opdrachtnr, event) {
   const hoofd = state.reparaties.find(r => r.opdrachtnr === opdrachtnr);
   _mabPerRegel = (hoofd?.opdrachtcode || '').toUpperCase().startsWith('REP');
 
-  // Toon of verberg gedeelde velden
+  // Toon of verberg gedeelde velden. Diagnose hoort alleen bij REP-opdrachten
+  // (dan per-regel, zie tekstVelden hieronder) — bij niet-REP dus nooit tonen,
+  // ook niet als gedeeld veld. 'Wat heb je gedaan?' blijft wel gewoon gedeeld
+  // zichtbaar bij niet-REP.
   const gedeeldBlok = document.getElementById('mab-diagnose')?.closest('.form-group');
   const gedeeldBlok2 = document.getElementById('mab-notitie')?.closest('.form-group');
-  if (gedeeldBlok)  gedeeldBlok.style.display  = _mabPerRegel ? 'none' : '';
+  if (gedeeldBlok)  gedeeldBlok.style.display  = 'none';
   if (gedeeldBlok2) gedeeldBlok2.style.display = _mabPerRegel ? 'none' : '';
   if (!_mabPerRegel) {
     document.getElementById('mab-diagnose').value = '';
@@ -3071,6 +2981,8 @@ function toonActiesView() {
   } else if (verwijderVoorraadBtn) {
     verwijderVoorraadBtn.style.display = isVoorraad ? '' : 'none';
   }
+  const wachtOnderdelenBtn = document.getElementById('md-wacht-onderdelen-btn');
+  if (wachtOnderdelenBtn) wachtOnderdelenBtn.style.display = isRepCode(state.activeMod) ? '' : 'none';
   laadOpmerkingen();
 }
 
@@ -3711,10 +3623,21 @@ let _tagnrQueueIdx = 0;
 let _tagnrGescand  = new Map(); // reparatieId → string[]
 let _tagnrOnDone   = null;
 
+// Tagnummer(s) verplicht als tagnrscannenjn='J' staat, óf (ongeacht die vlag)
+// bij opdrachtcode HUUR/RUIL voor J-regels met een aantal groter dan 0.
+function vereistTagnummer(r) {
+  if (!r) return false;
+  if ((r.tagnrscannenjn || '').toUpperCase() === 'J') return true;
+  const code = (r.opdrachtcode || '').toUpperCase();
+  return (code === 'HUUR' || code === 'RUIL')
+    && (r.doorsluizenjn || '').toUpperCase() === 'J'
+    && (parseInt(r.aantal) || 0) > 0;
+}
+
 function startTagnrScanQueue(ids, onDone) {
   const teInvoeren = ids.filter(id => {
     const r = state.reparaties.find(x => x.id === id);
-    return r && (r.tagnrscannenjn || '').toUpperCase() === 'J';
+    return vereistTagnummer(r);
   });
   if (!teInvoeren.length) { onDone(); return; }
   _tagnrQueue    = teInvoeren.map(id => {
@@ -6110,9 +6033,9 @@ function switchTab(name) {
   });
   document.getElementById('tab-'+name)?.classList.add('active');
   document.getElementById('view-'+name)?.classList.add('active');
-  // FAB alleen tonen op werkplaats/behandeling tabs
+  // FAB (opdracht aanmaken) alleen tonen op het Werkplaats-tabblad
   const fab = document.getElementById('fab-voorraad');
-  if (fab) fab.style.display = (name === 'config' || name === 'prep' || name === 'locatie') ? 'none' : 'flex';
+  if (fab) fab.style.display = (name === 'open') ? 'flex' : 'none';
   // Vul standaard filter UI wanneer instellingen worden geopend
   if (name === 'config' && state.reparaties?.length) vulStandaardFilterUI();
   if (name === 'locatie') { locReset(); locLaadVandaagLog(); }
