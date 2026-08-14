@@ -360,52 +360,56 @@
 
 <!-- ── MODAL: Reparatie detail / start ──────────────────────── -->
 <div class="modal-overlay" id="modal-start">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-title" id="ms-title">300001</div>
-    <div class="modal-sub"  id="ms-sub">Wasmachine · Bosch Series 6</div>
-    <div id="ms-instructies" style="display:none"></div>
-    <div class="modal-section" id="ms-artikelcode-sectie" style="display:none">
-      <div class="modal-label">Artikelcode</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <div class="modal-value" id="ms-artikelcode" style="font-family:var(--mono);font-size:13px">—</div>
-          <div id="ms-voorraad-badge"></div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="histories-knop" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);color:var(--info)" onclick="toonApparaatGeschiedenis()">📋 Historie</button>
+  <div class="modal" style="max-height:90dvh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal-handle" style="flex-shrink:0"></div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div class="modal-title" id="ms-title">300001</div>
+      <div class="modal-sub"  id="ms-sub">Wasmachine · Bosch Series 6</div>
+      <div id="ms-instructies" style="display:none"></div>
+      <div class="modal-section" id="ms-artikelcode-sectie" style="display:none">
+        <div class="modal-label">Artikelcode</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="modal-value" id="ms-artikelcode" style="font-family:var(--mono);font-size:13px">—</div>
+            <div id="ms-voorraad-badge"></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="histories-knop" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);color:var(--info)" onclick="toonApparaatGeschiedenis()">📋 Historie</button>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="modal-section" id="ms-apparaat-sectie" style="display:none">
-      <div class="modal-label">Apparaat</div>
-      <div class="modal-value" id="ms-apparaat">—</div>
-    </div>
-    <div class="modal-section" id="ms-tagnummer-sectie" style="display:none">
-      <div class="modal-label">Tagnummer</div>
-      <div class="modal-value" id="ms-tagnummer" style="font-family:var(--mono);font-size:13px">—</div>
-      <div id="ms-memogeschiedenis-wrap" style="display:none;margin-top:8px">
-        <div class="modal-label" style="margin-bottom:4px">Memogeschiedenis tagnummer</div>
-        <div id="ms-memogeschiedenis" style="padding:8px 10px;background:rgba(0,69,130,.05);border-left:3px solid var(--primary);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text);line-height:1.5;white-space:pre-wrap"></div>
+      <div class="modal-section" id="ms-apparaat-sectie" style="display:none">
+        <div class="modal-label">Apparaat</div>
+        <div class="modal-value" id="ms-apparaat">—</div>
       </div>
-    </div>
-    <div class="modal-section" id="ms-aantal-sectie" style="display:none">
-      <div class="modal-label">Aantal</div>
-      <div class="modal-value" id="ms-aantal" style="font-family:var(--mono);font-size:13px">—</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-label">Klacht</div>
-      <div class="modal-value" id="ms-klacht">—</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-label">Klant</div>
-      <div class="modal-value" id="ms-klant">—</div>
+      <div class="modal-section" id="ms-tagnummer-sectie" style="display:none">
+        <div class="modal-label">Tagnummer</div>
+        <div class="modal-value" id="ms-tagnummer" style="font-family:var(--mono);font-size:13px">—</div>
+        <div id="ms-memogeschiedenis-wrap" style="display:none;margin-top:8px">
+          <div class="modal-label" style="margin-bottom:4px">Memogeschiedenis tagnummer</div>
+          <div id="ms-memogeschiedenis" style="padding:8px 10px;background:rgba(0,69,130,.05);border-left:3px solid var(--primary);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text);line-height:1.5;white-space:pre-wrap"></div>
+        </div>
+      </div>
+      <div class="modal-section" id="ms-aantal-sectie" style="display:none">
+        <div class="modal-label">Aantal</div>
+        <div class="modal-value" id="ms-aantal" style="font-family:var(--mono);font-size:13px">—</div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-label">Klacht</div>
+        <div class="modal-value" id="ms-klacht">—</div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-label">Klant</div>
+        <div class="modal-value" id="ms-klant">—</div>
+      </div>
     </div>
 
-    <hr class="modal-divider">
-    <button class="btn btn-primary" onclick="startReparatie()">Claimen</button>
-    <button class="btn btn-ghost" style="margin-top:8px;color:#f5a623;border-color:#f5a623" onclick="zetWachtOpOnderdelen()">📦 Wacht op onderdelen</button>
-    <button class="btn btn-ghost" onclick="closeModal('modal-start')">Annuleren</button>
+    <div style="flex-shrink:0">
+      <hr class="modal-divider" style="margin:12px 0">
+      <button class="btn btn-primary" onclick="startReparatie()">Claimen</button>
+      <button id="ms-wacht-onderdelen-btn" class="btn btn-ghost" style="margin-top:8px;color:#f5a623;border-color:#f5a623" onclick="zetWachtOpOnderdelen()">📦 Wacht op onderdelen</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-start')">Annuleren</button>
+    </div>
   </div>
 </div>
 
@@ -438,25 +442,16 @@
       <span id="ma-taal-badge" style="font-size:10px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;color:var(--muted);white-space:nowrap"></span>
     </div>
 
-    <div class="form-group" style="margin-top:10px">
+    <div class="form-group" id="ma-diagnose-sectie" style="margin-top:10px">
       <label class="form-label">Diagnose / wat was het probleem?</label>
-      <div class="spraak-wrap">
-        <textarea class="form-textarea spraak-notitie" id="ma-diagnose" placeholder="Beschrijf de oorzaak van het defect..."></textarea>
-        <button class="spraak-btn" id="spraak-diagnose-btn" onclick="toggleSpraak('ma-diagnose','spraak-diagnose-btn','Beschrijf de oorzaak van het defect...')" title="Inspreken">🎙</button>
-      </div>
+      <textarea class="form-textarea spraak-notitie" id="ma-diagnose" placeholder="Beschrijf de oorzaak van het defect..."></textarea>
       <div id="ma-regel-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
     </div>
 
     <div class="form-group">
-      <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
-        Wat heb je gedaan?
-        <span id="spraak-status" style="font-size:10px;color:var(--muted);font-family:var(--mono)"></span>
-      </label>
+      <label class="form-label">Wat heb je gedaan?</label>
       <div id="ma-werkplaats-taken"></div>
-      <div class="spraak-wrap">
-        <textarea class="form-textarea spraak-notitie" id="ma-notitie" placeholder="Omschrijf de uitgevoerde werkzaamheden..."></textarea>
-        <button class="spraak-btn" id="spraak-btn" onclick="toggleSpraak('ma-notitie','spraak-btn','Omschrijf de uitgevoerde werkzaamheden...')" title="Inspreken">🎙</button>
-      </div>
+      <textarea class="form-textarea spraak-notitie" id="ma-notitie" placeholder="Omschrijf de uitgevoerde werkzaamheden..."></textarea>
       <div id="ma-notitie-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
     </div>
 
