@@ -28,6 +28,16 @@ const TOEGESTANE_TABELLEN = new Set([
   'postcodes',
 ]);
 
+// ── Beperkte set toegestane 'embeds' (Supabase-achtige geneste select,
+// bv. `.select('..., monteurs(naam, initialen)')`) ─────────────────────────
+// Alleen wat de frontend daadwerkelijk gebruikt; niet generiek voor elke
+// tabelcombinatie. fk = kolom op de hoofdtabel, pk = kolom op de embed-tabel.
+const TOEGESTANE_EMBEDS = {
+  reparaties: {
+    monteurs: { fk: 'monteur_id', pk: 'id' },
+  },
+};
+
 // Realtime-kanalen per tabel (voor broadcasting na mutaties)
 const TABEL_KANAAL = {
   reparaties:     'werkplaats-sync',
@@ -64,9 +74,14 @@ function normaliseerWaarde(val) {
 }
 
 // ── Query-parameter → WHERE-clausule ───────────────────────────────────────
-function buildWhere(params) {
+// `tabelPrefix` is optioneel en wordt alleen meegegeven zodra de query een
+// JOIN bevat (embed, zie hieronder) — voorkomt "column is ambiguous"-fouten
+// tegen de embed-tabel, zonder de kolomreferenties voor de veelgebruikte
+// join-loze aanroepen te wijzigen.
+function buildWhere(params, tabelPrefix) {
   const conditions = [];
   const values     = [];
+  const qCol = (col) => tabelPrefix ? `\`${tabelPrefix}\`.\`${col}\`` : `\`${col}\``;
 
   for (const [key, val] of Object.entries(params)) {
     let col;
@@ -84,28 +99,28 @@ function buildWhere(params) {
     if (!isGeldigeKolom(col)) continue;
 
     if (key.startsWith('eq_')) {
-      conditions.push(`\`${col}\` = ?`);
+      conditions.push(`${qCol(col)} = ?`);
       values.push(val);
     } else if (key.startsWith('neq_')) {
-      conditions.push(`\`${col}\` != ?`);
+      conditions.push(`${qCol(col)} != ?`);
       values.push(val);
     } else if (key.startsWith('in_')) {
       const vals = val.split(',');
-      conditions.push(`\`${col}\` IN (${vals.map(() => '?').join(',')})`);
+      conditions.push(`${qCol(col)} IN (${vals.map(() => '?').join(',')})`);
       values.push(...vals);
     } else if (key.startsWith('is_')) {
-      if (val === 'null') conditions.push(`\`${col}\` IS NULL`);
-      else { conditions.push(`\`${col}\` = ?`); values.push(val); }
+      if (val === 'null') conditions.push(`${qCol(col)} IS NULL`);
+      else { conditions.push(`${qCol(col)} = ?`); values.push(val); }
     } else if (key.startsWith('not_null_')) {
-      conditions.push(`\`${col}\` IS NOT NULL`);
+      conditions.push(`${qCol(col)} IS NOT NULL`);
     } else if (key.startsWith('gte_')) {
-      conditions.push(`\`${col}\` >= ?`);
+      conditions.push(`${qCol(col)} >= ?`);
       values.push(val);
     } else if (key.startsWith('lte_')) {
-      conditions.push(`\`${col}\` <= ?`);
+      conditions.push(`${qCol(col)} <= ?`);
       values.push(val);
     } else if (key.startsWith('ilike_')) {
-      conditions.push(`\`${col}\` LIKE ?`);
+      conditions.push(`${qCol(col)} LIKE ?`);
       values.push(`%${val.replace(/%/g, '')}%`);
     }
   }
@@ -114,6 +129,27 @@ function buildWhere(params) {
     where: conditions.length ? 'WHERE ' + conditions.join(' AND ') : '',
     values,
   };
+}
+
+// Parseert een select-string als 'kol1, kol2, tabel(kolA, kolB)' in platte
+// kolommen + (optioneel) één toegestane embed-specificatie.
+function parseSelect(select, tabel) {
+  const embeds = TOEGESTANE_EMBEDS[tabel] || {};
+  const embedMatch = select.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/);
+  let plain = select;
+  let embed = null;
+
+  if (embedMatch && embeds[embedMatch[1]]) {
+    const [, embedTabel, embedColsRaw] = embedMatch;
+    const embedCols = embedColsRaw.split(',').map(c => c.trim()).filter(isGeldigeKolom);
+    if (embedCols.length) {
+      embed = { tabel: embedTabel, cols: embedCols, ...embeds[embedTabel] };
+    }
+    plain = select.slice(0, embedMatch.index) + select.slice(embedMatch.index + embedMatch[0].length);
+  }
+
+  const plainCols = plain.split(',').map(c => c.trim()).filter(c => c && isGeldigeKolom(c));
+  return { plainCols, embed };
 }
 
 // Verwijder interne queryparams zodat ze niet in buildWhere terecht komen
@@ -130,29 +166,67 @@ router.get('/:tabel', async (req, res) => {
   }
 
   const { select = '*', order, asc, limit, single, offset } = req.query;
-  const { where, values } = buildWhere(filterParams(req.query));
 
-  // Kolommen: '*' of valideerde 'col1,col2,...'
-  const cols = select === '*'
-    ? '*'
-    : select.split(',').map(c => c.trim()).filter(isGeldigeKolom).map(c => `\`${c}\``).join(', ') || '*';
+  // Kolommen: '*', of validated 'col1,col2,...' met eventueel één embed
+  // (bv. 'monteurs(naam, initialen)' — Supabase-achtige geneste select).
+  let cols, joinClause = '', embed = null;
+  if (select === '*') {
+    cols = '*';
+  } else {
+    const parsed = parseSelect(select, tabel);
+    embed = parsed.embed;
+    const plainSql = parsed.plainCols.map(c => `\`${tabel}\`.\`${c}\``).join(', ');
+    if (embed) {
+      const embedSql = embed.cols
+        .map(c => `\`${embed.tabel}\`.\`${c}\` AS \`__embed_${embed.tabel}_${c}\``)
+        .join(', ');
+      cols = [plainSql, embedSql].filter(Boolean).join(', ') || '*';
+      joinClause = `LEFT JOIN \`${embed.tabel}\` ON \`${tabel}\`.\`${embed.fk}\` = \`${embed.tabel}\`.\`${embed.pk}\``;
+    } else {
+      cols = plainSql || '*';
+    }
+  }
 
-  // ORDER BY alleen toestaan met geldige kolomnaam
-  const orderClause  = (order && isGeldigeKolom(order)) ? `ORDER BY \`${order}\` ${asc === '0' ? 'DESC' : 'ASC'}` : '';
+  // WHERE/ORDER qualificeren met de hoofdtabel zodra er een JOIN actief is
+  // (voorkomt "column is ambiguous" tegen de embed-tabel, bv. beide `id`).
+  const { where, values } = buildWhere(filterParams(req.query), embed ? tabel : null);
+  const orderClause = (order && isGeldigeKolom(order))
+    ? `ORDER BY ${embed ? `\`${tabel}\`.\`${order}\`` : `\`${order}\``} ${asc === '0' ? 'DESC' : 'ASC'}`
+    : '';
   const limitClause  = limit  ? `LIMIT ${parseInt(limit)}`  : (single === '1' ? 'LIMIT 1' : '');
   const offsetClause = offset ? `OFFSET ${parseInt(offset)}` : '';
 
   try {
     const [rows] = await db.query(
-      `SELECT ${cols} FROM \`${tabel}\` ${where} ${orderClause} ${limitClause} ${offsetClause}`,
+      `SELECT ${cols} FROM \`${tabel}\` ${joinClause} ${where} ${orderClause} ${limitClause} ${offsetClause}`,
       values
     );
 
+    // Embed-kolommen (__embed_<tabel>_<kolom>) terugvouwen tot een genest
+    // object per rij, zoals Supabase dat ook deed — null als de FK niet
+    // matcht (LEFT JOIN geeft dan alleen NULL-waarden terug).
+    const data = embed ? rows.map(row => {
+      const out = {};
+      const nested = {};
+      let heeftWaarde = false;
+      const prefix = `__embed_${embed.tabel}_`;
+      for (const [k, v] of Object.entries(row)) {
+        if (k.startsWith(prefix)) {
+          nested[k.slice(prefix.length)] = v;
+          if (v !== null) heeftWaarde = true;
+        } else {
+          out[k] = v;
+        }
+      }
+      out[embed.tabel] = heeftWaarde ? nested : null;
+      return out;
+    }) : rows;
+
     if (single === '1') {
-      if (rows.length === 0) return res.status(406).json({ data: null, error: 'Niet gevonden' });
-      return res.json({ data: rows[0], error: null });
+      if (data.length === 0) return res.status(406).json({ data: null, error: 'Niet gevonden' });
+      return res.json({ data: data[0], error: null });
     }
-    res.json({ data: rows, error: null });
+    res.json({ data, error: null });
 
   } catch (err) {
     console.error(`[GET /${tabel}]`, err.message);
