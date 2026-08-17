@@ -30,3 +30,23 @@ jobs:
             } |
             Select-Object -First 30 TimeCreated, ProviderName, LevelDisplayName, Message |
             Format-List
+
+      - name: Tail backend stderr.log (read-only)
+        shell: powershell
+        run: |
+          $path = "${{ secrets.IIS_PATH }}\backend\logs\stderr.log"
+          if (Test-Path $path) {
+            Get-Content $path -Tail 100
+          } else {
+            Write-Output "Bestand bestaat nog niet: $path"
+          }
+
+      - name: Tail backend stdout.log (read-only)
+        shell: powershell
+        run: |
+          $path = "${{ secrets.IIS_PATH }}\backend\logs\stdout.log"
+          if (Test-Path $path) {
+            Get-Content $path -Tail 100
+          } else {
+            Write-Output "Bestand bestaat nog niet: $path"
+          }

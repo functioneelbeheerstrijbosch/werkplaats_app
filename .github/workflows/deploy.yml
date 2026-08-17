@@ -49,6 +49,23 @@ jobs:
 
           npm i
 
+      - name: Configure backend logging
+        shell: powershell
+        run: |
+          # Zorgt dat console.log/console.error van de backend daadwerkelijk
+          # ergens terechtkomen — NSSM doet dat niet uit zichzelf. Idempotent:
+          # veilig om bij elke deploy opnieuw te zetten. Rotatie voorkomt dat
+          # de bestanden onbeperkt groeien (10MB per bestand).
+          $logDir = "${{ secrets.IIS_PATH }}\backend\logs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $nssm = "C:\Program Files (x86)\nssm-2.24\win64\nssm.exe"
+          & $nssm set StrijboschAPI AppStdout "$logDir\stdout.log"
+          & $nssm set StrijboschAPI AppStderr "$logDir\stderr.log"
+          & $nssm set StrijboschAPI AppRotateFiles 1
+          & $nssm set StrijboschAPI AppRotateOnline 1
+          & $nssm set StrijboschAPI AppRotateBytes 10485760
+
       - name: Restart backend
         shell: powershell
         run: |
