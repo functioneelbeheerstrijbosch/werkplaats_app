@@ -41,12 +41,28 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// IIS/ARR geeft het client-IP soms door inclusief poort (bv.
+// "89.47.177.154:53469"), wat express-rate-limit's eigen keyGenerator
+// afkeurt als ongeldig IP-adres (ERR_ERL_INVALID_IP_ADDRESS). Knip een
+// eventuele poort eraf vóór we 'm als sleutel gebruiken — IPv4 en
+// bracketed IPv6 ("[::1]:53469"), kaal IPv6 laten we ongemoeid (bevat zelf
+// ook dubbele punten, dus geen poort om te knippen).
+function ipZonderPoort(req) {
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  const ipv4MetPoort = ip.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+$/);
+  if (ipv4MetPoort) return ipv4MetPoort[1];
+  const ipv6MetPoort = ip.match(/^\[(.+)\]:\d+$/);
+  if (ipv6MetPoort) return ipv6MetPoort[1];
+  return ip;
+}
+
 // ── Rate limiting op login (ISO 27001 R04) ───────────────────────
 const loginLimiter = rateLimit({
   windowMs:         60 * 1000,  // 1 minuut
   max:              5,           // max 5 pogingen per IP
   standardHeaders:  true,
   legacyHeaders:    false,
+  keyGenerator:     ipZonderPoort,
   message: { error: 'Te veel loginpogingen. Probeer het over een minuut opnieuw.' },
 });
 
@@ -56,6 +72,7 @@ const apiLimiter = rateLimit({
   max:             300,          // ruim genoeg voor normaal gebruik
   standardHeaders: true,
   legacyHeaders:   false,
+  keyGenerator:    ipZonderPoort,
   message: { error: 'Te veel verzoeken. Probeer het later opnieuw.' },
 });
 
