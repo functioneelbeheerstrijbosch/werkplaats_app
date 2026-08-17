@@ -16,6 +16,13 @@ const { startSync }   = require('./sync');
 
 const app = express();
 
+// IIS/ARR zit als reverse proxy vóór deze app en stuurt X-Forwarded-For mee.
+// Zonder 'trust proxy' gooit express-rate-limit op elke request een
+// ValidationError (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR) omdat het die header
+// dan niet vertrouwt — 1 hop vertrouwen (de eigen reverse proxy) is correct
+// hier, niet de hele keten.
+app.set('trust proxy', 1);
+
 // ── Security headers (ISO 27001 R10) ────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
