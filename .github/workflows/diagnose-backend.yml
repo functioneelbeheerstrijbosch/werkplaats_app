@@ -1,0 +1,33 @@
+name: Diagnose backend (read-only)
+
+# Alleen handmatig te starten — draait nooit automatisch, triggert geen
+# deploy en herstart de service niet. Puur lezen uit de al aanwezige
+# logbestanden (backend/logs/std{out,err}.log).
+# Tijdelijk bestand — wordt na gebruik weer verwijderd.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: self-hosted
+
+    steps:
+      - name: Tail backend stderr.log (read-only)
+        shell: powershell
+        run: |
+          $path = "${{ secrets.IIS_PATH }}\backend\logs\stderr.log"
+          if (Test-Path $path) {
+            Get-Content $path -Tail 150
+          } else {
+            Write-Output "Bestand bestaat nog niet: $path"
+          }
+
+      - name: Tail backend stdout.log (read-only)
+        shell: powershell
+        run: |
+          $path = "${{ secrets.IIS_PATH }}\backend\logs\stdout.log"
+          if (Test-Path $path) {
+            Get-Content $path -Tail 60
+          } else {
+            Write-Output "Bestand bestaat nog niet: $path"
+          }
