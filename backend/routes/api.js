@@ -167,6 +167,12 @@ router.get('/:tabel', async (req, res) => {
 
   const { select = '*', order, asc, limit, single, offset } = req.query;
 
+  const { where, values } = buildWhere(filterParams(req.query));
+  const orderClause  = (order && isGeldigeKolom(order)) ? `ORDER BY \`${order}\` ${asc === '0' ? 'DESC' : 'ASC'}` : '';
+  const limitClause  = limit  ? `LIMIT ${parseInt(limit)}`  : (single === '1' ? 'LIMIT 1' : '');
+  const offsetClause = offset ? `OFFSET ${parseInt(offset)}` : '';
+  const gebruikDeferredJoin = !!orderClause && !!limitClause;
+
   // Kolommen: '*', of validated 'col1,col2,...' met eventueel één embed
   // (bv. 'monteurs(naam, initialen)' — Supabase-achtige geneste select).
   // Bewust GEEN SQL-JOIN voor de embed: een JOIN duwt de MySQL-planner naar
@@ -174,7 +180,7 @@ router.get('/:tabel', async (req, res) => {
   // ontstond de "Out of sort memory"-fout opnieuw, ook mét index op de
   // sorteerkolom). De hoofdquery blijft dus een kale SELECT die de index
   // kan gebruiken; de embed-tabel wordt apart en klein nabevraagd.
-  let cols, embed = null, fkWasAangevraagd = true;
+  let cols, embed = null, fkWasAangevraagd = true, idWasAangevraagd = true;
   if (select === '*') {
     cols = '*';
   } else {
@@ -188,42 +194,49 @@ router.get('/:tabel', async (req, res) => {
       fkWasAangevraagd = false;
       plainCols = [...plainCols, embed.fk];
     }
+    // Idem voor id: nodig om na de deferred-join-fix (zie hieronder) de
+    // brede rijen weer in de juiste volgorde te kunnen terugzetten.
+    if (gebruikDeferredJoin && !plainCols.includes('id')) {
+      idWasAangevraagd = false;
+      plainCols = [...plainCols, 'id'];
+    }
     cols = plainCols.map(c => `\`${c}\``).join(', ') || '*';
   }
-
-  const { where, values } = buildWhere(filterParams(req.query));
-  const orderClause  = (order && isGeldigeKolom(order)) ? `ORDER BY \`${order}\` ${asc === '0' ? 'DESC' : 'ASC'}` : '';
-  const limitClause  = limit  ? `LIMIT ${parseInt(limit)}`  : (single === '1' ? 'LIMIT 1' : '');
-  const offsetClause = offset ? `OFFSET ${parseInt(offset)}` : '';
 
   // Bij ORDER BY + LIMIT op een brede select (veel/grote kolommen) kiest
   // MySQL vaak filesort i.p.v. de index, ook als die er staat — de
   // optimizer moet dan alsnog alle brede rijen sorteren, wat op "Out of
-  // sort memory" kan lopen (gezien op /api/reparaties, 2026-08-17).
-  // Fix: eerst smal sorteren/limiteren (alleen id, licht voor de sort-
-  // buffer, kan de index gebruiken), dán pas de volledige rijen ophalen
-  // voor die kleine subset. JOIN naar een derived table i.p.v. WHERE id IN
-  // (subquery) — MySQL ondersteunt LIMIT niet binnen een IN-subquery
-  // (ER_NOT_SUPPORTED_YET).
-  const gebruikDeferredJoin = !!orderClause && !!limitClause;
-  let query;
-  if (gebruikDeferredJoin) {
-    const colsVoorJoin  = cols === '*' ? 't.*' : cols.split(', ').map(c => `t.${c}`).join(', ');
-    const orderVoorJoin = `ORDER BY t.\`${order}\` ${asc === '0' ? 'DESC' : 'ASC'}`;
-    query = `SELECT ${colsVoorJoin} FROM \`${tabel}\` t
-      JOIN (
-        SELECT \`id\` FROM \`${tabel}\` ${where} ${orderClause} ${limitClause} ${offsetClause}
-      ) AS _ids ON t.\`id\` = _ids.\`id\`
-      ${orderVoorJoin}`;
-  } else {
-    query = `SELECT ${cols} FROM \`${tabel}\` ${where} ${orderClause} ${limitClause} ${offsetClause}`;
-  }
-
+  // sort memory" kan lopen (gezien op /api/reparaties, 2026-08-17). Zelfs
+  // een JOIN-naar-derived-table hield een filesort over ná de join.
+  // Structurele fix: sorteren/limiteren gebeurt uitsluitend op de smalle
+  // id-lijst (licht, kan de index gebruiken) — de brede rijen worden
+  // daarna ongesorteerd opgehaald (`WHERE id IN (...)`, geen ORDER BY, dus
+  // geen filesort mogelijk) en in JS teruggezet in de volgorde die de
+  // id-query al bepaald had. Kost niets noemenswaardigs bij de hier
+  // relevante aantallen (max `limit` rijen).
   try {
-    const [rows] = await db.query(
-      query,
-      values
-    );
+    let rows = [];
+
+    if (gebruikDeferredJoin) {
+      const [idRijen] = await db.query(
+        `SELECT \`id\` FROM \`${tabel}\` ${where} ${orderClause} ${limitClause} ${offsetClause}`,
+        values
+      );
+      const geordendeIds = idRijen.map(r => r.id);
+      if (geordendeIds.length > 0) {
+        const query = `SELECT ${cols} FROM \`${tabel}\` WHERE \`id\` IN (${geordendeIds.map(() => '?').join(',')})`;
+        [rows] = await db.query(query, geordendeIds);
+        // Terugzetten in de volgorde die de id-query al bepaalde.
+        const rijPerId = new Map(rows.map(r => [r.id, r]));
+        rows = geordendeIds.map(id => rijPerId.get(id)).filter(Boolean);
+        if (!idWasAangevraagd) {
+          rows = rows.map(({ id: _weg, ...rest }) => rest);
+        }
+      }
+    } else {
+      const query = `SELECT ${cols} FROM \`${tabel}\` ${where} ${orderClause} ${limitClause} ${offsetClause}`;
+      [rows] = await db.query(query, values);
+    }
 
     // Embed: FK-waarden verzamelen en de gerelateerde rijen in één aparte,
     // kleine query ophalen — dan in JS samenvoegen. Nooit meer dan
