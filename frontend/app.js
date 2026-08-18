@@ -2281,6 +2281,12 @@ async function afrondReparatie(uitkomst) {
       serienummer: r.serienummer,
       tagnummer: r.tagnummer,
       notitie: notitieMetUitkomst || null,
+      // Los van 'notitie' (die blijft samengeperst t.b.v. weergave in de
+      // app) — schone, aparte velden voor data-doeleinden (rapportage/
+      // terugkoppeling), zie internal-docs/architectuur-en-audit.md §10.3.
+      diagnose: diagnose || null,
+      werkzaamheden: notitie || null,
+      uitkomst: uitkomst || null,
       gebruikte_onderdelen: onderdelen || null,
       bestede_tijd_minuten: totalMin || null,
       taal: _taalVoorkeur,
@@ -2554,6 +2560,10 @@ async function bevestigBulkAfrond() {
           serienummer:  r.serienummer,
           tagnummer:    r.tagnummer,
           notitie:      notitieGecombineerd || null,
+          // Zie afrondReparatie() hierboven — zelfde principe, losse
+          // velden naast de samengeperste 'notitie'.
+          diagnose:     rDiagnose || null,
+          werkzaamheden: rNotitie || null,
           bestede_tijd_minuten: tijdPerRegel[id] || null,
         });
         await _insertTagnrScans(logRij?.id, id, r.opdrachtnr, r.regelnummer, r.artikelcode, state.monteur.id, now);
