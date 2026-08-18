@@ -2287,6 +2287,10 @@ async function afrondReparatie(uitkomst) {
       diagnose: diagnose || null,
       werkzaamheden: notitie || null,
       uitkomst: uitkomst || null,
+      opdrachtstatus: r.status || null,       // status vóór afronden
+      nieuwe_opdrachtstatus: '519',           // status ná afronden
+      magazijnlocatie: r.magazijnlocatie || null,
+      uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
       gebruikte_onderdelen: onderdelen || null,
       bestede_tijd_minuten: totalMin || null,
       taal: _taalVoorkeur,
@@ -2564,6 +2568,10 @@ async function bevestigBulkAfrond() {
           // velden naast de samengeperste 'notitie'.
           diagnose:     rDiagnose || null,
           werkzaamheden: rNotitie || null,
+          opdrachtstatus: r.status || null,       // status vóór afronden
+          nieuwe_opdrachtstatus: '519',           // status ná afronden
+          magazijnlocatie: r.magazijnlocatie || null,
+          uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
           bestede_tijd_minuten: tijdPerRegel[id] || null,
         });
         await _insertTagnrScans(logRij?.id, id, r.opdrachtnr, r.regelnummer, r.artikelcode, state.monteur.id, now);
