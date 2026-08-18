@@ -1487,6 +1487,8 @@ async function vrijgeefRegel(id) {
       artikelcode: r.artikelcode,
       artikelomschrijving: r.artikelomschrijving,
       notitie: `Regel vrijgegeven door ${state.monteur.naam}`,
+      opdrachtstatus: r.status || null,
+      nieuwe_opdrachtstatus: '445',
     });
     for (const n of nRegels) {
       await updateReparatieStatus(n.id, vrijgeefData);
@@ -1541,6 +1543,8 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
           artikelcode: r.artikelcode,
           artikelomschrijving: r.artikelomschrijving,
           notitie: `Hele opdracht vrijgegeven door ${state.monteur.naam}`,
+          opdrachtstatus: r.status || null,
+          nieuwe_opdrachtstatus: '445',
         });
         r.status = '445';
         r.monteur_id = null;
@@ -1671,7 +1675,7 @@ async function bevestigClaimAlles() {
           toegewezen_door: r.toegewezen_door || 'monteur',
           in_behandeling_op: now,
         });
-        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer });
+        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '465' });
       } catch(e) {
         toast('Fout bij regel ' + (r.regelnummer ?? r.id) + ': ' + e.message);
       }
@@ -2126,7 +2130,7 @@ async function startReparatie() {
       toegewezen_door: r.toegewezen_door || 'monteur',
       in_behandeling_op: now,
     });
-    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer });
+    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '465' });
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
@@ -2162,7 +2166,7 @@ async function vrijgevenReparatie() {
 
   try {
     await updateReparatieStatus(r.id, { status: '445', monteur_id: null, in_behandeling_op: null });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '445' });
     await laadReparaties();
     switchTab('open');
     toast('↩ ' + r.opdrachtnr + ' vrijgegeven');
@@ -6151,7 +6155,7 @@ async function zetWachtOpOnderdelen() {
   }
   try {
     await updateReparatieStatus(r.id, { status: '480' });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '480' });
     await laadReparaties();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
   } catch(e) { toast('Fout: ' + e.message); }
@@ -6173,7 +6177,7 @@ async function zetVoorraadBeschikbaar(opdrachtnr) {
     for (const r of regels) {
       await updateReparatieStatus(r.id, { status: '445', monteur_id: null, in_behandeling_op: null });
     }
-    await insertLog({ reparatie_id: regels[0].id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'voorraad_beschikbaar', opdrachtnr });
+    await insertLog({ reparatie_id: regels[0].id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'voorraad_beschikbaar', opdrachtnr, opdrachtstatus: '480', nieuwe_opdrachtstatus: '445' });
     delete state.onderdelenKleuren[opdrachtnr];
     verwijderOnderdelenKleurOpslag(opdrachtnr);
     await laadReparaties();
