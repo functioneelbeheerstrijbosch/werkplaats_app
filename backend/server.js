@@ -69,7 +69,12 @@ const loginLimiter = rateLimit({
 // ── Rate limiting op alle API-routes ────────────────────────────
 const apiLimiter = rateLimit({
   windowMs:        60 * 1000,   // 1 minuut
-  max:             300,          // ruim genoeg voor normaal gebruik
+  // 300 bleek te krap zodra de rate-limiter (na de trust-proxy-fix) écht
+  // per IP ging tellen: één pagina-load van de monteur-app doet al snel
+  // 15-20 requests, en meerdere monteurs achter hetzelfde kantoor-IP
+  // (NAT) delen deze teller. 600 laat dat ruim toe, met nog steeds een
+  // zinvolle bovengrens tegen misbruik/bugs.
+  max:             600,
   standardHeaders: true,
   legacyHeaders:   false,
   keyGenerator:    ipZonderPoort,

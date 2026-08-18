@@ -25,14 +25,18 @@ const state = {
 // Cache zodat dezelfde postcode+landcode niet meerdere keren opgezocht wordt
 const _latLngCache = new Map();
 
-async function haalLatLng(postcode, landcode) {
-  if (!postcode || !landcode) return null;
-  // NL-postcodes zijn 4 cijfers + 2 letters (bijv. 1234AB) — GeoNames heeft alleen de 4 cijfers
-  // Andere landen (DE=5 cijfers, BE/DK=4 cijfers) worden ongewijzigd opgezocht
+// NL-postcodes zijn 4 cijfers + 2 letters (bijv. 1234AB) — GeoNames heeft alleen de 4 cijfers.
+// Andere landen (DE=5 cijfers, BE/DK=4 cijfers) worden ongewijzigd opgezocht.
+function _normaliseerPostcode(postcode, landcode) {
   const lc = landcode.trim().toUpperCase();
   const rawPc = postcode.trim().toUpperCase();
   const pc = lc === 'NL' ? rawPc.slice(0, 4) : rawPc;
-  const sleutel = `${pc}|${lc}`;
+  return { pc, lc, sleutel: `${pc}|${lc}` };
+}
+
+async function haalLatLng(postcode, landcode) {
+  if (!postcode || !landcode) return null;
+  const { pc, sleutel } = _normaliseerPostcode(postcode, landcode);
   if (_latLngCache.has(sleutel)) return _latLngCache.get(sleutel);
 
   const { data, error } = await sb
@@ -44,6 +48,37 @@ async function haalLatLng(postcode, landcode) {
   const resultaat = (!error && data) ? { lat: +data.lat, lng: +data.lng } : null;
   _latLngCache.set(sleutel, resultaat);
   return resultaat;
+}
+
+// Haalt lat/lng op voor meerdere postcode+landcode-paren in zo min mogelijk
+// requests (één query per land, via .in('postcode', [...])) i.p.v. één
+// losse request per postcode — bij honderden unieke postcodes op een
+// pagina-load scheelt dat honderden requests (zie ook de rate-limiter).
+async function prefetchLatLng(paren) {
+  const perLand = new Map(); // landcode -> Set(genormaliseerde postcode)
+  for (const { postcode, landcode } of paren) {
+    if (!postcode || !landcode) continue;
+    const { pc, lc, sleutel } = _normaliseerPostcode(postcode, landcode);
+    if (_latLngCache.has(sleutel)) continue;
+    if (!perLand.has(lc)) perLand.set(lc, new Set());
+    perLand.get(lc).add(pc);
+  }
+  if (perLand.size === 0) return;
+
+  await Promise.all([...perLand.entries()].map(async ([lc, pcSet]) => {
+    const pcs = [...pcSet];
+    const { data } = await sb.from('postcodes').select('postcode, lat, lng').in('postcode', pcs);
+    const gevonden = new Set();
+    for (const row of data || []) {
+      gevonden.add(row.postcode);
+      _latLngCache.set(`${row.postcode}|${lc}`, { lat: +row.lat, lng: +row.lng });
+    }
+    // Ontbrekende postcodes ook cachen (als 'niet gevonden') zodat haalLatLng
+    // ze niet alsnog los gaat opvragen.
+    for (const pc of pcs) {
+      if (!gevonden.has(pc)) _latLngCache.set(`${pc}|${lc}`, null);
+    }
+  }));
 }
 
 // Haversine-formule: afstand in km tussen twee coördinaten
@@ -73,8 +108,8 @@ async function berekenAlleAfstanden() {
     if (!uniek.has(sleutel)) uniek.set(sleutel, { postcode: r.postcode, landcode: r.landcode });
   }
 
-  // Alle unieke combinaties parallel ophalen (vult de cache)
-  await Promise.all([...uniek.values()].map(({ postcode, landcode }) => haalLatLng(postcode, landcode)));
+  // Alle unieke combinaties in zo min mogelijk requests ophalen (vult de cache)
+  await prefetchLatLng([...uniek.values()]);
 
   // Afstand toewijzen vanuit cache — geen extra DB-calls meer
   for (const r of state.reparaties) {
