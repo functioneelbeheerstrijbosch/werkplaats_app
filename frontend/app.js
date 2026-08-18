@@ -3442,6 +3442,10 @@ async function slaRegelOp() {
   try {
     const { data: nieuw, error } = await sb.from('reparaties').insert({
       opdrachtnr:    _regelModalOpdrachtnr,
+      // Markeert deze regel als niet-ERP-afkomstig — zo blaast de opruimstap
+      // in backend/sync.js 'm nooit weg omdat 'ie (logischerwijs) nooit in de
+      // sync-data voorkomt. Zelfde principe als soort='voorraad'.
+      soort:         'handmatig',
       opdrachtcode:  hoofd?.opdrachtcode  || null,
       abonneecode:   hoofd?.abonneecode   || null,
       klant_naam:    hoofd?.klant_naam    || null,

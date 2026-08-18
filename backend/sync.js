@@ -78,6 +78,11 @@ const BESCHERMDE_VELDEN = new Set([
   'status', 'diagnose',
 ]);
 
+// Onder dit aantal rijen in een sync-batch wordt er NIET opgeruimd — een
+// kapotte/tijdelijk lege API- of MSSQL-respons mag nooit de hele tabel
+// leegvegen. 50 is een bewuste, expliciete keuze (zie internal-docs).
+const MIN_RIJEN_VOOR_OPRUIMEN = 50;
+
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
 function normaliseerDatum(v) {
@@ -109,6 +114,46 @@ function bouwMysqlRij(mssqlRij) {
   return rij;
 }
 
+// Verwijdert reparaties die niet meer voorkomen in de laatst opgehaalde
+// sync-data. Alleen rijen die de sync zelf ooit heeft aangemaakt/beheert
+// (`soort IS NULL`) komen in aanmerking — voorraad-opdrachten
+// (`soort = 'voorraad'`) en handmatig toegevoegde regels
+// (`soort = 'handmatig'`) komen per definitie nooit in de ERP-feed voor en
+// blijven dus altijd staan. Cascadeert naar reparatie_logs/-antwoorden via
+// de database (zorg dat die FK's op ON DELETE SET NULL staan, niet CASCADE
+// — anders verdwijnt de werkgeschiedenis mee, zie internal-docs).
+async function ruimNietMeerAanwezigeRegelsOp(bron, gezienPerRegel) {
+  if (gezienPerRegel.size < MIN_RIJEN_VOOR_OPRUIMEN) {
+    console.warn(`[${bron}] Slechts ${gezienPerRegel.size} rijen ontvangen (< ${MIN_RIJEN_VOOR_OPRUIMEN}) — opruimen overgeslagen, dit lijkt op een storing i.p.v. een echt lege sync.`);
+    return;
+  }
+
+  try {
+    // in_behandeling_op IS NOT NULL => een monteur is er nu actief mee bezig;
+    // die regel nooit opruimen, ook niet als de opdracht tussentijds uit de
+    // sync verdwijnt (bv. in ERP afgesloten terwijl iemand nog bezig is).
+    const [lokaal] = await db.query(
+      "SELECT id, opdrachtnr, regelnummer FROM reparaties WHERE soort IS NULL AND in_behandeling_op IS NULL"
+    );
+    const teVerwijderen = lokaal.filter(
+      r => !gezienPerRegel.has(`${r.opdrachtnr}|${r.regelnummer ?? 1}`)
+    );
+    if (teVerwijderen.length === 0) return;
+
+    const ids = teVerwijderen.map(r => r.id);
+    await db.query(
+      `DELETE FROM reparaties WHERE id IN (${ids.map(() => '?').join(',')})`,
+      ids
+    );
+    console.log(
+      `[${bron}] ${teVerwijderen.length} regel(s) opgeruimd (niet meer in sync): ` +
+      teVerwijderen.map(r => `${r.opdrachtnr}/${r.regelnummer ?? 1}`).join(', ')
+    );
+  } catch (err) {
+    console.error(`[${bron}] Fout bij opruimen:`, err.message);
+  }
+}
+
 // ── Hoofd sync-functie ────────────────────────────────────────────────────────
 
 let eersteKeer = true;
@@ -126,11 +171,13 @@ async function syncReparaties(pool) {
 
   console.log(`[SYNC] ${rijen.length} rijen gelezen`);
   let nieuw = 0, bijgewerkt = 0, fouten = 0;
+  const gezienPerRegel = new Set();
 
   for (const mssqlRij of rijen) {
     try {
       const rij = bouwMysqlRij(mssqlRij);
       if (!rij.opdrachtnr) continue;
+      gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
       const [bestaand] = await db.query(
         'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
@@ -167,6 +214,7 @@ async function syncReparaties(pool) {
   }
 
   console.log(`[SYNC] Klaar: ${nieuw} nieuw, ${bijgewerkt} bijgewerkt, ${fouten} fouten`);
+  await ruimNietMeerAanwezigeRegelsOp('SYNC', gezienPerRegel);
 }
 
 async function eenSync() {
@@ -266,11 +314,13 @@ async function syncVanApi() {
 
     console.log(`[API] ${apiRijen.length} rijen ontvangen`);
     let nieuw = 0, bijgewerkt = 0, fouten = 0;
+    const gezienPerRegel = new Set();
 
     for (const apiRij of apiRijen) {
       try {
         const rij = bouwApiRij(apiRij);
         if (!rij.opdrachtnr) continue;
+        gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
         const [bestaand] = await db.query(
           'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
@@ -305,6 +355,7 @@ async function syncVanApi() {
     }
 
     console.log(`[API] Klaar: ${nieuw} nieuw, ${bijgewerkt} bijgewerkt, ${fouten} fouten`);
+    await ruimNietMeerAanwezigeRegelsOp('API', gezienPerRegel);
   } catch (err) {
     console.error('[API] Fout:', err.message);
   }
