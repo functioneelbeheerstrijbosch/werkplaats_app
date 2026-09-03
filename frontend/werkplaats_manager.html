@@ -1041,6 +1041,16 @@ async function planningFetch(pad, opties = {}) {
   return _normaliseerPlanningIds(json);
 }
 
+// REP-opdrachten (behalve REPKR/REPPR) lopen als reparatie door de
+// statussen 445→465→519, overige opdrachtcodes (leveringen) als
+// 500→470→519 — zelfde onderscheid en functienamen als frontend/app.js.
+function isRepCode(r) {
+  const code = (r?.opdrachtcode || '').toUpperCase();
+  return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
+}
+function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
+
 let alleReparaties  = [];
 let alleMonteurs    = [];
 let alleOnderdelen  = [];
@@ -1398,16 +1408,17 @@ async function vrijgeefRegelManager(id) {
   );
 
   const orig = { status: r.status, monteur_id: r.monteur_id, toegewezen_door: r.toegewezen_door, monteurs: r.monteurs, in_behandeling_op: r.in_behandeling_op, afgerond_op: r.afgerond_op };
-  r.status = '445'; r.monteur_id = null; r.toegewezen_door = null; r.monteurs = null; r.in_behandeling_op = null; r.afgerond_op = null;
-  nRegels.forEach(n => { n.status = '445'; n.monteur_id = null; n.toegewezen_door = null; n.monteurs = null; n.in_behandeling_op = null; });
+  const nieuweStatus = statusOpen(r);
+  r.status = nieuweStatus; r.monteur_id = null; r.toegewezen_door = null; r.monteurs = null; r.in_behandeling_op = null; r.afgerond_op = null;
+  nRegels.forEach(n => { n.status = statusOpen(n); n.monteur_id = null; n.toegewezen_door = null; n.monteurs = null; n.in_behandeling_op = null; });
   renderBoard();
 
-  const vrijgeefData = { status: '445', monteur_id: null, toegewezen_door: null, in_behandeling_op: null, afgerond_op: null };
+  const vrijgeefData = { status: nieuweStatus, monteur_id: null, toegewezen_door: null, in_behandeling_op: null, afgerond_op: null };
   try {
     await planningFetch(`/reparaties/${id}`, { method: 'PATCH', body: vrijgeefData });
     if (nRegels.length) {
       await Promise.all(nRegels.map(n => planningFetch(`/reparaties/${n.id}`, {
-        method: 'PATCH', body: { status: '445', monteur_id: null, toegewezen_door: null, in_behandeling_op: null },
+        method: 'PATCH', body: { status: statusOpen(n), monteur_id: null, toegewezen_door: null, in_behandeling_op: null },
       })));
     }
     toast(`✓ Regel ${r.opdrachtnr} vrijgegeven — opnieuw claimbaar`);
@@ -1875,30 +1886,35 @@ async function onDrop(e, monteurId) {
   dragReparatieIds    = [];
   realtimeBlocked     = true;
 
-  const now        = new Date().toISOString();
-  const updateData = monteurId
-    ? { monteur_id: monteurId, toegewezen_door: 'manager', status: '465', in_behandeling_op: now }
-    : { monteur_id: null, toegewezen_door: null, status: '445', in_behandeling_op: null, afgerond_op: null };
+  const now = new Date().toISOString();
 
-  // Optimistische update voor alle gesleepte regels
-  const originals = [];
+  // Optimistische update voor alle gesleepte regels — status per regel bepaald
+  // via statusOpen()/statusInBehandeling() (reparatie vs. levering), niet één
+  // gedeelde waarde: gesleepte regels kunnen van verschillende soort zijn.
+  const originals   = [];
+  const updateDatas = {};
   gesleepteIds.forEach(id => {
     const rep = alleReparaties.find(r => r.id === id);
     if (!rep) return;
     originals.push({ rep, orig: { monteur_id: rep.monteur_id, toegewezen_door: rep.toegewezen_door, monteurs: rep.monteurs, status: rep.status, in_behandeling_op: rep.in_behandeling_op } });
-    rep.monteur_id        = monteurId;
-    rep.toegewezen_door   = monteurId ? 'manager' : null;
+    const updateData = monteurId
+      ? { monteur_id: monteurId, toegewezen_door: 'manager', status: statusInBehandeling(rep), in_behandeling_op: now }
+      : { monteur_id: null, toegewezen_door: null, status: statusOpen(rep), in_behandeling_op: null, afgerond_op: null };
+    updateDatas[id] = updateData;
+    rep.monteur_id        = updateData.monteur_id;
+    rep.toegewezen_door   = updateData.toegewezen_door;
     rep.monteurs          = monteurId ? (alleMonteurs.find(m => m.id === monteurId) || null) : null;
-    rep.status            = monteurId ? '465' : '445';
-    rep.in_behandeling_op = monteurId ? now : null;
+    rep.status            = updateData.status;
+    rep.in_behandeling_op = updateData.in_behandeling_op;
   });
   renderBoard();
 
   // Stuur updates naar de backend
   let fout = null;
   for (const id of gesleepteIds) {
+    if (!updateDatas[id]) continue; // regel niet (meer) gevonden in alleReparaties
     try {
-      await planningFetch(`/reparaties/${id}`, { method: 'PATCH', body: updateData });
+      await planningFetch(`/reparaties/${id}`, { method: 'PATCH', body: updateDatas[id] });
     } catch (e) { fout = e; break; }
   }
 
@@ -1923,10 +1939,10 @@ async function onDrop(e, monteurId) {
       !gesleepteIds.includes(x.id)
     );
     if (nTeVrijgeven.length) {
-      nTeVrijgeven.forEach(n => { n.status = '445'; n.monteur_id = null; n.toegewezen_door = null; n.monteurs = null; n.in_behandeling_op = null; });
+      nTeVrijgeven.forEach(n => { n.status = statusOpen(n); n.monteur_id = null; n.toegewezen_door = null; n.monteurs = null; n.in_behandeling_op = null; });
       renderBoard();
       await Promise.all(nTeVrijgeven.map(n => planningFetch(`/reparaties/${n.id}`, {
-        method: 'PATCH', body: { status: '445', monteur_id: null, toegewezen_door: null, in_behandeling_op: null },
+        method: 'PATCH', body: { status: statusOpen(n), monteur_id: null, toegewezen_door: null, in_behandeling_op: null },
       })));
     }
   }
@@ -2929,7 +2945,7 @@ function maakOpenGeclaimdKaartHTML(regels, nr, statusType, monteurMap, repLookup
     const mNaam = r.monteur_naam || mont?.naam || '';
     const st    = String(r.status);
     const afg   = st === '519';
-    const claim = st === '465';
+    const claim = st === statusInBehandeling(r);
     const ond   = st === '480';
 
     const rowStyle = afg   ? 'cursor:default;border-left:2px solid var(--ok);opacity:.6'
@@ -3031,10 +3047,9 @@ async function renderOpdrachten() {
   const onderdelenGroepen  = [];
 
   Object.entries(perOpdracht).forEach(([nr, regels]) => {
-    const statussen    = regels.map(r => String(r.status));
-    const alleAfgerond = statussen.every(s => s === '519');
-    const heeftClaim   = statussen.some(s => s === '465');
-    const heeftOnd     = statussen.some(s => s === '480');
+    const alleAfgerond = regels.every(r => String(r.status) === '519');
+    const heeftClaim   = regels.some(r => String(r.status) === statusInBehandeling(r));
+    const heeftOnd     = regels.some(r => String(r.status) === '480');
     if (alleAfgerond) return; // valt in afgerond-sectie via log-query
     if (heeftClaim)       geclaimdGroepen.push({ nr, regels });
     else if (heeftOnd)    onderdelenGroepen.push({ nr, regels });

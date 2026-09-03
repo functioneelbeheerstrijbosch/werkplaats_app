@@ -492,7 +492,7 @@ function renderLists() {
   const behandeling = state.reparaties.filter(r =>
     !isRegelAfgerond(r) && r.monteur_id === mijnId &&
     r.status !== '480' &&
-    (r.status === '465' || (r.doorsluizenjn || '').toUpperCase() === 'J')
+    (r.status === statusInBehandeling(r) || (r.doorsluizenjn || '').toUpperCase() === 'J')
   );
 
   // Afgerond: op basis van reparatie_logs (blijft staan ook als status wordt gereset)
@@ -514,8 +514,8 @@ function renderLists() {
         if (isInstructieRegel(r)) return false;
         if (r.status === '480') return false; // Wacht op onderdelen — niet claimbaar
         if (r.monteur_id && r.monteur_id !== mijnId) return false; // geclaimd door iemand anders
-        // Standaard claimbaar via status
-        if ((r.status === '445' || r.status === '450') && (r.doorsluizenjn || '').toUpperCase() === 'J') return true;
+        // Standaard claimbaar via status (445/450 = open reparatie, 500 = open levering)
+        if ((r.status === statusOpen(r) || r.status === '450') && (r.doorsluizenjn || '').toUpperCase() === 'J') return true;
         // J-regels zonder artikelcode zijn ook claimbaar ongeacht de ERP-status,
         // zolang ze vrij zijn (geen monteur) en niet afgerond.
         if ((r.doorsluizenjn || '').toUpperCase() === 'J' && !r.monteur_id) return true;
@@ -524,10 +524,10 @@ function renderLists() {
       .map(r => r.opdrachtnr)
   );
 
-  // Geclaimd door anderen: status 465, monteur is iemand anders
+  // Geclaimd door anderen: status in behandeling, monteur is iemand anders
   const geclaimdDoorAnderenNrs = new Set(
     state.reparaties
-      .filter(r => r.status === '465' && r.monteur_id && r.monteur_id !== mijnId && !isInstructieRegel(r) && geldigeOpdrachten.has(r.opdrachtnr))
+      .filter(r => r.status === statusInBehandeling(r) && r.monteur_id && r.monteur_id !== mijnId && !isInstructieRegel(r) && geldigeOpdrachten.has(r.opdrachtnr))
       .map(r => r.opdrachtnr)
       .filter(nr => !claimbare.has(nr)) // niet tonen als er nog vrije regels zijn
   );
@@ -1095,7 +1095,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
   // "Alles afronden" + "Alles vrijgeven" — eigen regels in behandeling
   const mijneRegels = werkRegels.filter(r => r.monteur_id === mijnId);
   // Controleer alleen de regels die de monteur zelf wil afronden
-  const blokkeerRegels = mijneRegels.filter(r => r.status !== '465');
+  const blokkeerRegels = mijneRegels.filter(r => r.status !== statusInBehandeling(r));
   const kanBulkAfronden = modus === 'behandeling' && mijneRegels.length > 1 && blokkeerRegels.length === 0;
   const allesAfronden = modus === 'behandeling' && mijneRegels.length > 1
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
@@ -1474,7 +1474,7 @@ async function vrijgeefRegel(id) {
 
   if (state.demoMode) {
     [r, ...nRegels].forEach(x => {
-      x.status = '445';
+      x.status = statusOpen(x);
       x.monteur_id = null;
       x.monteurs = null;
       x.in_behandeling_op = null;
@@ -1484,7 +1484,8 @@ async function vrijgeefRegel(id) {
   }
 
   try {
-    const vrijgeefData = { status: '445', monteur_id: null, toegewezen_door: null, in_behandeling_op: null };
+    const nieuweStatus = statusOpen(r);
+    const vrijgeefData = { status: nieuweStatus, monteur_id: null, toegewezen_door: null, in_behandeling_op: null };
     await updateReparatieStatus(id, vrijgeefData);
     await insertLog({
       reparatie_id: id,
@@ -1498,13 +1499,13 @@ async function vrijgeefRegel(id) {
       artikelomschrijving: r.artikelomschrijving,
       notitie: `Regel vrijgegeven door ${state.monteur.naam}`,
       opdrachtstatus: r.status || null,
-      nieuwe_opdrachtstatus: '445',
+      nieuwe_opdrachtstatus: nieuweStatus,
     });
     for (const n of nRegels) {
-      await updateReparatieStatus(n.id, vrijgeefData);
+      await updateReparatieStatus(n.id, { ...vrijgeefData, status: statusOpen(n) });
     }
     [r, ...nRegels].forEach(x => {
-      x.status = '445';
+      x.status = statusOpen(x);
       x.monteur_id = null;
       x.monteurs = null;
       x.in_behandeling_op = null;
@@ -1531,15 +1532,16 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
     const r = state.reparaties.find(x => x.id === id);
     if (!r) continue;
 
+    const nieuweStatus = statusOpen(r);
     if (state.demoMode) {
-      r.status = '445';
+      r.status = nieuweStatus;
       r.monteur_id = null;
       r.monteurs = null;
       r.in_behandeling_op = null;
     } else {
       try {
         await updateReparatieStatus(id, {
-          status: '445',
+          status: nieuweStatus,
           monteur_id: null,
           toegewezen_door: null,
           in_behandeling_op: null,
@@ -1556,9 +1558,9 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
           artikelomschrijving: r.artikelomschrijving,
           notitie: `Hele opdracht vrijgegeven door ${state.monteur.naam}`,
           opdrachtstatus: r.status || null,
-          nieuwe_opdrachtstatus: '445',
+          nieuwe_opdrachtstatus: nieuweStatus,
         });
-        r.status = '445';
+        r.status = nieuweStatus;
         r.monteur_id = null;
         r.monteurs = null;
         r.in_behandeling_op = null;
@@ -1674,20 +1676,21 @@ async function bevestigClaimAlles() {
   for (const id of alleTeClaimenIds) {
     const r = state.reparaties.find(x => x.id === id);
     if (!r) continue;
+    const nieuweStatus = statusInBehandeling(r);
     if (state.demoMode) {
-      r.status = '465';
+      r.status = nieuweStatus;
       r.monteur_id = mijnId;
       r.monteurs   = { naam: state.monteur.naam, initialen: state.monteur.initialen };
       r.in_behandeling_op = now;
     } else {
       try {
         await updateReparatieStatus(r.id, {
-          status: '465',
+          status: nieuweStatus,
           monteur_id: mijnId,
           toegewezen_door: r.toegewezen_door || 'monteur',
           in_behandeling_op: now,
         });
-        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '465' });
+        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
       } catch(e) {
         toast('Fout bij regel ' + (r.regelnummer ?? r.id) + ': ' + e.message);
       }
@@ -2118,7 +2121,7 @@ async function startReparatie() {
 
   const now = new Date().toISOString();
   if (state.demoMode) {
-    r.status = '465';
+    r.status = statusInBehandeling(r);
     r.monteur_id = mijnId;
     r.monteurs   = { naam: state.monteur.naam, initialen: state.monteur.initialen };
     r.in_behandeling_op = now;
@@ -2126,7 +2129,7 @@ async function startReparatie() {
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     if (alleJ.every(r2 => r2.monteur_id)) {
       state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id)
-        .forEach(n => { n.status = '465'; n.monteur_id = mijnId; n.monteurs = { naam: state.monteur.naam, initialen: state.monteur.initialen }; n.in_behandeling_op = now; });
+        .forEach(n => { n.status = statusInBehandeling(n); n.monteur_id = mijnId; n.monteurs = { naam: state.monteur.naam, initialen: state.monteur.initialen }; n.in_behandeling_op = now; });
     }
     renderLists();
     switchTab('behandeling');
@@ -2136,20 +2139,21 @@ async function startReparatie() {
   }
 
   try {
+    const nieuweStatus = statusInBehandeling(r);
     await updateReparatieStatus(r.id, {
-      status: '465',
+      status: nieuweStatus,
       monteur_id: mijnId,
       toegewezen_door: r.toegewezen_door || 'monteur',
       in_behandeling_op: now,
     });
-    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '465' });
+    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
     if (alleJGeclaimd) {
       const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id);
       for (const n of nRegels) {
-        await updateReparatieStatus(n.id, { status: '465', monteur_id: mijnId, toegewezen_door: 'monteur', in_behandeling_op: now });
+        await updateReparatieStatus(n.id, { status: statusInBehandeling(n), monteur_id: mijnId, toegewezen_door: 'monteur', in_behandeling_op: now });
       }
     }
     await laadReparaties();
@@ -2167,7 +2171,7 @@ async function vrijgevenReparatie() {
   closeModal('modal-detail');
 
   if (state.demoMode) {
-    r.status = '445';
+    r.status = statusOpen(r);
     r.monteur_id = null;
     r.monteurs   = null;
     renderLists();
@@ -2177,8 +2181,9 @@ async function vrijgevenReparatie() {
   }
 
   try {
-    await updateReparatieStatus(r.id, { status: '445', monteur_id: null, in_behandeling_op: null });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '445' });
+    const nieuweStatus = statusOpen(r);
+    await updateReparatieStatus(r.id, { status: nieuweStatus, monteur_id: null, in_behandeling_op: null });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
     await laadReparaties();
     switchTab('open');
     toast('↩ ' + r.opdrachtnr + ' vrijgegeven');
@@ -2207,6 +2212,13 @@ function isRepCode(r) {
   const code = (r?.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
 }
+
+// Statusverloop verschilt per soort regel, bepaald via dezelfde isRepCode()
+// als hierboven: reparaties lopen 445 (open) → 465 (in behandeling) → 519
+// (afgerond), leveringen 500 (open) → 470 (in behandeling) → 519. Afronden
+// komt voor beide op 519 uit, dus daar is geen aparte functie voor nodig.
+function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
 
 function isRepUitkomstRegel(r) {
   const code = (r.opdrachtcode || '').toUpperCase();
@@ -2368,7 +2380,7 @@ async function openBulkAfrond(ids, opdrachtnr, event) {
     try {
       const { data: openRegels, error } = await sb
         .from('reparaties')
-        .select('id, status, monteur_id, artikelcode, doorsluizenjn')
+        .select('id, status, monteur_id, artikelcode, doorsluizenjn, opdrachtcode')
         .eq('opdrachtnr', opdrachtnr)
         .neq('status', '519')
         .is('afgerond_op', null);
@@ -2376,10 +2388,10 @@ async function openBulkAfrond(ids, opdrachtnr, event) {
       const teAfronden = new Set(ids.map(String));
       const blokkeer = (openRegels || []).filter(r =>
         teAfronden.has(String(r.id)) &&
-        r.status !== '465'
+        r.status !== statusInBehandeling(r)
       );
       if (blokkeer.length) {
-        toast(`Kan niet afronden — ${blokkeer.length} van jouw regel${blokkeer.length !== 1 ? 's hebben' : ' heeft'} niet status 465.`);
+        toast(`Kan niet afronden — ${blokkeer.length} van jouw regel${blokkeer.length !== 1 ? 's hebben' : ' heeft'} niet de status 'in behandeling'.`);
         await laadReparaties();
         return;
       }
@@ -2491,17 +2503,17 @@ async function bevestigBulkAfrond() {
     try {
       const { data: openRegels, error } = await sb
         .from('reparaties')
-        .select('id, status, monteur_id, artikelcode, doorsluizenjn')
+        .select('id, status, monteur_id, artikelcode, doorsluizenjn, opdrachtcode')
         .eq('opdrachtnr', eersteRep.opdrachtnr)
         .neq('status', '519')
         .is('afgerond_op', null);
       if (error) throw error;
       const teAfronden2 = new Set(bulkAfrondIds.map(String));
       const blokkeer = (openRegels || []).filter(r =>
-        teAfronden2.has(String(r.id)) && r.status !== '465'
+        teAfronden2.has(String(r.id)) && r.status !== statusInBehandeling(r)
       );
       if (blokkeer.length) {
-        toast(`Kan niet opslaan — ${blokkeer.length} van jouw regel${blokkeer.length !== 1 ? 's hebben' : ' heeft'} niet (meer) status 465.`);
+        toast(`Kan niet opslaan — ${blokkeer.length} van jouw regel${blokkeer.length !== 1 ? 's hebben' : ' heeft'} niet (meer) de status 'in behandeling'.`);
         closeModal('modal-afrond-bulk');
         await laadReparaties();
         return;
@@ -2718,7 +2730,7 @@ function openDetail(id) {
   if (mdGeluidSectie) mdGeluidSectie.style.display = '';
   laadKlokVoorReparatie();
   // Als de order al van de huidige monteur is → direct naar actiesmenu
-  if (r.status === '465' && String(r.monteur_id) === String(state.monteur?.id)) {
+  if (r.status === statusInBehandeling(r) && String(r.monteur_id) === String(state.monteur?.id)) {
     toonActiesView();
   } else {
     toonKeuzeView();
@@ -3501,7 +3513,7 @@ async function slaRegelOp() {
       doorsluizenjn: 'J',
       regelnummer:   volgendNr,
       aantal:        1,
-      status:        '445',
+      status:        statusOpen({ opdrachtcode: hoofd?.opdrachtcode }),
       monteur_id:    null,
       klacht:        hoofd?.klacht || null,
       uiterste_datum_afdeling: hoofd?.uiterste_datum_afdeling || null,
