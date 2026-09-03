@@ -118,6 +118,14 @@ async function berekenAlleAfstanden() {
   }
 }
 
+// LET OP: deze select-lijst wordt door de backend letterlijk gevolgd — een
+// kolom die hier niet in staat, bestaat simpelweg niet op de objecten in
+// state.reparaties. Dat gaat stil mis bij insertLog(): een veld met waarde
+// `undefined` wordt door JSON.stringify uit de body gegooid, dus de kolom
+// belandt niet eens in de INSERT en blijft NULL — zonder foutmelding. Zo
+// stond `regelnummer` lange tijd leeg in reparatie_logs (en werd het als
+// `1` naar AMF gestuurd via de `?? 1`-fallback in sync.js). Voeg elk veld
+// dat ergens gelogd of doorgestuurd wordt hier dus ook echt toe.
 async function fetchReparaties() {
   const BATCH = 1000;
   let alles = [];
@@ -126,7 +134,7 @@ async function fetchReparaties() {
   while (true) {
     const { data, error } = await sb
       .from('reparaties')
-      .select('id, opdrachtnr, opdrachtcode, abonneecode, handeling, klant_naam, klant_nummer, betalercode, artikelcode, artikelomschrijving, merk, model, serienummer, tagnummer, memogeschiedenis, klacht, prioriteit, status, opdrachtstatus, soort, aantal, doorsluizenjn, tagnrscannenjn, werkplaats, productgroep, magazijnlocatie, landcode, organisatie, monteur_id, toegewezen_door, uiterste_datum_afdeling, reden_datum, aangemaakt_op, in_behandeling_op, afgerond_op, postcode, monteurs(naam, initialen)')
+      .select('id, opdrachtnr, regelnummer, opdrachtcode, abonneecode, handeling, klant_naam, klant_nummer, betalercode, artikelcode, artikelomschrijving, merk, model, serienummer, tagnummer, memogeschiedenis, klacht, prioriteit, status, opdrachtstatus, soort, aantal, doorsluizenjn, tagnrscannenjn, werkplaats, productgroep, magazijnlocatie, landcode, organisatie, monteur_id, toegewezen_door, uiterste_datum_afdeling, reden_datum, aangemaakt_op, in_behandeling_op, afgerond_op, postcode, monteurs(naam, initialen)')
       .order('aangemaakt_op', { ascending: false })
       .range(offset, offset + BATCH - 1);
 
