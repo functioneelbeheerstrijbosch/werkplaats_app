@@ -2251,6 +2251,56 @@ function kiesUitkomst(uitkomst) {
   startVragenQueue([r.id], () => afrondReparatie(uitkomst));
 }
 
+// Ná het afronden van (een deel van) de J-regels van een opdracht: als
+// daarmee alle J-regels afgerond zijn, ronden de bijbehorende N-regels
+// (onderdelen) automatisch mee af — anders blijven die achter in 'in
+// behandeling' terwijl de opdracht zelf al klaar is. Zelfde principe als
+// het auto-claimen van N-regels bij claimen, zie startReparatie() en
+// bevestigClaimAlles(). Aanroepen ná een laadReparaties()/state-update
+// zodat de zojuist afgeronde regel(s) al meetellen in de check.
+async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
+  const alleJRegels = state.reparaties.filter(r =>
+    r.opdrachtnr === opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(r)
+  );
+  if (!alleJRegels.length || !alleJRegels.every(isRegelAfgerond)) return;
+
+  const nRegels = state.reparaties.filter(r =>
+    r.opdrachtnr === opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'N' && !isRegelAfgerond(r)
+  );
+  if (!nRegels.length) return;
+
+  if (state.demoMode) {
+    nRegels.forEach(n => { n.status = '519'; n.afgerond_op = now; });
+    return;
+  }
+
+  for (const n of nRegels) {
+    try {
+      await updateReparatieStatus(n.id, { status: '519', afgerond_op: now });
+      await insertLog({
+        reparatie_id: n.id,
+        monteur_id: state.monteur.id,
+        monteur_naam: state.monteur.naam,
+        actie: 'afgerond',
+        opdrachtnr: n.opdrachtnr,
+        regelnummer: n.regelnummer,
+        opdrachtcode: n.opdrachtcode || null,
+        artikelcode: n.artikelcode,
+        aantal: n.aantal,
+        artikelomschrijving: n.artikelomschrijving,
+        serienummer: n.serienummer,
+        tagnummer: n.tagnummer,
+        notitie: 'Automatisch afgerond — alle regels van de opdracht zijn klaar',
+        opdrachtstatus: n.status || null,
+        nieuwe_opdrachtstatus: '519',
+      });
+    } catch (e) {
+      toast('Fout bij automatisch afronden onderdeel: ' + e.message);
+    }
+  }
+  await laadReparaties();
+}
+
 async function afrondReparatie(uitkomst) {
   const r = state.activeMod;
   if (!r) return;
@@ -2290,6 +2340,7 @@ async function afrondReparatie(uitkomst) {
   if (state.demoMode) {
     r.status = eindStatus;
     r.afgerond_op = now;
+    await voltooiNRegelsIndienCompleet(r.opdrachtnr, now);
     renderLists();
     switchTab('afgerond');
     toast('✓ ' + r.opdrachtnr + ' afgerond');
@@ -2337,6 +2388,7 @@ async function afrondReparatie(uitkomst) {
     }
     await _insertTagnrScans(logRij?.id, r.id, r.opdrachtnr, r.regelnummer, r.artikelcode, state.monteur.id, now);
     await laadReparaties();
+    await voltooiNRegelsIndienCompleet(r.opdrachtnr, now);
     switchTab('afgerond');
     toast('✓ ' + r.opdrachtnr + ' afgerond');
   } catch(e) {
@@ -2554,10 +2606,12 @@ async function bevestigBulkAfrond() {
 
   if (state.demoMode) {
     const now = new Date().toISOString();
+    const demoOpdrachtnr = state.reparaties.find(x => x.id === bulkAfrondIds[0])?.opdrachtnr;
     bulkAfrondIds.forEach(id => {
       const r = state.reparaties.find(x => x.id === id);
       if (r) { r.status = '519'; r.afgerond_op = now; }
     });
+    if (demoOpdrachtnr) await voltooiNRegelsIndienCompleet(demoOpdrachtnr, now);
     renderLists(); switchTab('afgerond');
     toast(`✓ ${bulkAfrondIds.length} regels afgerond`);
     return;
@@ -2567,10 +2621,12 @@ async function bevestigBulkAfrond() {
   startVragenQueue(bulkAfrondIds, async () => {
     const now = new Date().toISOString();
     const gezienOpdrachtnrsBulk = new Set();
+    let bulkOpdrachtnr = null;
     try {
       for (const id of bulkAfrondIds) {
         const r = state.reparaties.find(x => x.id === id);
         if (!r) continue;
+        if (!bulkOpdrachtnr) bulkOpdrachtnr = r.opdrachtnr;
         const vragenItems = [...(vragenNotities.get(id) || [])];
         if (!gezienOpdrachtnrsBulk.has(r.opdrachtnr)) {
           gezienOpdrachtnrsBulk.add(r.opdrachtnr);
@@ -2612,6 +2668,7 @@ async function bevestigBulkAfrond() {
         await _insertTagnrScans(logRij?.id, id, r.opdrachtnr, r.regelnummer, r.artikelcode, state.monteur.id, now);
       }
       await laadReparaties();
+      if (bulkOpdrachtnr) await voltooiNRegelsIndienCompleet(bulkOpdrachtnr, now);
       switchTab('afgerond');
       toast(`✓ ${bulkAfrondIds.length} regels afgerond`);
     } catch(e) {
