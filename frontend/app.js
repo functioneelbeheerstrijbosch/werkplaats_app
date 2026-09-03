@@ -4555,11 +4555,6 @@ async function slaVragensetOp() {
   }
 }
 
-// Vul hieronder je gegevens in van emailjs.com
-const EMAILJS_PUBLIC_KEY  = 'cjP4B0PO-6s4LiwGB';   // Account → API Keys
-const EMAILJS_SERVICE_ID  = 'service_x5tgdz8';   // Email Services → Service ID
-const EMAILJS_TEMPLATE_ID = 'template_7fexmis';  // Email Templates → Template ID
-
 // ── CHAT MICROFOON (spraak → Rens) ───────────────────────────
 let chatMicActief = false;
 let chatMicRec    = null;
@@ -4655,8 +4650,6 @@ function stopChatMic() {
   if (knop) knop.classList.remove('luistert');
   if (input) input.placeholder = 'Stel een vraag...';
 }
-
-emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 
 async function laadOorzaakcodes() {
   const sel = document.getElementById('waf-oorzaakcode');
