@@ -2282,9 +2282,13 @@ async function afrondReparatie(uitkomst) {
 
   closeModal('modal-afrond');
   const now = new Date().toISOString();
+  // Afgekeurd apparaat krijgt een eigen eindstatus (370) i.p.v. de normale
+  // afrond-status 519 — alleen bereikbaar via de uitkomst-vraag hierboven
+  // (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
+  const eindStatus = uitkomst === 'afgekeurd' ? '370' : '519';
 
   if (state.demoMode) {
-    r.status = '519';
+    r.status = eindStatus;
     r.afgerond_op = now;
     renderLists();
     switchTab('afgerond');
@@ -2295,7 +2299,7 @@ async function afrondReparatie(uitkomst) {
   try {
     clearKlok(r.id); // klok wissen bij afronden
     stopKlokTick();
-    await updateReparatieStatus(r.id, { status: '519', afgerond_op: now });
+    await updateReparatieStatus(r.id, { status: eindStatus, afgerond_op: now });
     const logRij = await insertLog({
       reparatie_id: r.id,
       monteur_id: state.monteur.id,
@@ -2317,7 +2321,7 @@ async function afrondReparatie(uitkomst) {
       werkzaamheden: notitie || null,
       uitkomst: uitkomst || null,
       opdrachtstatus: r.status || null,       // status vóór afronden
-      nieuwe_opdrachtstatus: '519',           // status ná afronden
+      nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (519, of 370 bij afgekeurd)
       magazijnlocatie: r.magazijnlocatie || null,
       uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
       gebruikte_onderdelen: onderdelen || null,

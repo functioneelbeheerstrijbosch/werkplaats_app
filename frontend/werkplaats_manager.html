@@ -1304,7 +1304,9 @@ function resetDashFilter() {
 
 // Een regel is afgerond als status=519 OF als afgerond_op gevuld is.
 // Dit voorkomt dat externe syncs (Google Cloud) die status terugzetten naar 445
-// afgeronde opdrachten opnieuw laten verschijnen.
+// afgeronde opdrachten opnieuw laten verschijnen. De afgerond_op-fallback vangt
+// ook status 370 (afgekeurd bij afronden, zie afrondReparatie() in app.js) —
+// daarom hier gebruiken i.p.v. rechtstreeks op '519' te vergelijken.
 function isRegelAfgerond(r) {
   return String(r.status) === '519' || !!r.afgerond_op;
 }
@@ -1403,8 +1405,7 @@ async function vrijgeefRegelManager(id) {
     x.opdrachtnr === r.opdrachtnr &&
     (x.doorsluizenjn || '').toUpperCase() === 'N' &&
     x.monteur_id &&
-    String(x.status) !== '519' &&
-    !x.afgerond_op
+    !isRegelAfgerond(x)
   );
 
   const orig = { status: r.status, monteur_id: r.monteur_id, toegewezen_door: r.toegewezen_door, monteurs: r.monteurs, in_behandeling_op: r.in_behandeling_op, afgerond_op: r.afgerond_op };
@@ -1566,7 +1567,7 @@ function toggleAfDetail(uid) {
 
 async function heropendOpdracht(nr) {
   if (!confirm(`Opdracht ${nr} terugzetten naar de wachtrij?\nDe regels worden beschikbaar gesteld voor monteurs.`)) return;
-  const regels = alleReparaties.filter(r => r.opdrachtnr === nr && String(r.status) === '519');
+  const regels = alleReparaties.filter(r => r.opdrachtnr === nr && isRegelAfgerond(r));
   if (!regels.length) { toast('Geen afgeronde regels gevonden voor ' + nr); return; }
   let fout = null;
   for (const r of regels) {
@@ -1619,13 +1620,13 @@ function maakGroepKaart(regels, huidigeMonteurId) {
   // Volledigheidscheck over ALLE monteurs heen (uit alleReparaties)
   const alleJRegels       = alleReparaties.filter(r => r.opdrachtnr === hoofd.opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'J');
   const totaalOpdracht    = alleJRegels.length;
-  const afgerondOpdracht  = alleJRegels.filter(r => String(r.status) === '519').length;
+  const afgerondOpdracht  = alleJRegels.filter(isRegelAfgerond).length;
   const volledigAfgerond  = totaalOpdracht > 0 && afgerondOpdracht === totaalOpdracht;
   const gedeeltelijkAf   = afgerondOpdracht > 0 && afgerondOpdracht < totaalOpdracht;
 
   // Hoeveel regels heeft déze monteur afgerond
   const mijnJRegels   = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J');
-  const mijnAfgerond  = mijnJRegels.filter(r => String(r.status) === '519').length;
+  const mijnAfgerond  = mijnJRegels.filter(isRegelAfgerond).length;
 
   let borderStijl = '';
   if      (volledigAfgerond)       borderStijl = 'border-left:3px solid var(--ok)';
@@ -1661,7 +1662,7 @@ function maakGroepKaart(regels, huidigeMonteurId) {
   const nRegels = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'N');
 
   const regelRijHTML = r => {
-    const afgerond = String(r.status) === '519';
+    const afgerond = isRegelAfgerond(r);
     const bezet    = !afgerond && r.monteur_id && r.monteur_id !== huidigeMonteurId;
     const eigen    = !afgerond && r.monteur_id && r.monteur_id === huidigeMonteurId;
     const rijKlasse = afgerond
@@ -1934,8 +1935,7 @@ async function onDrop(e, monteurId) {
       vrijgegOrderNrs.has(x.opdrachtnr) &&
       (x.doorsluizenjn || '').toUpperCase() === 'N' &&
       x.monteur_id &&
-      String(x.status) !== '519' &&
-      !x.afgerond_op &&
+      !isRegelAfgerond(x) &&
       !gesleepteIds.includes(x.id)
     );
     if (nTeVrijgeven.length) {
@@ -2508,7 +2508,7 @@ function renderDashboard() {
 
   // ── 1. Opdrachtcode overzicht ────────────────────────────────────
   const openReps = alleReparaties.filter(r =>
-    String(r.status) !== '519' && matchCode(r) && matchMont(r.monteur_id)
+    !isRegelAfgerond(r) && matchCode(r) && matchMont(r.monteur_id)
   );
 
   const alleCodes = [...new Set([
@@ -2633,12 +2633,12 @@ function renderDashboard() {
     const mLogs    = logsVandaag.filter(l => String(l.monteur_id) === String(m.id));
     const mGedaan  = new Set(mLogs.map(l => l.opdrachtnr)).size;
     const mDeadline = uniekNrs(alleReparaties.filter(r =>
-      r.monteur_id === m.id && String(r.status) !== '519' && matchCode(r) &&
+      r.monteur_id === m.id && !isRegelAfgerond(r) && matchCode(r) &&
       r.uiterste_datum_afdeling &&
       new Date(r.uiterste_datum_afdeling) >= vandaag && new Date(r.uiterste_datum_afdeling) < morgen
     ));
     const mOpen = uniekNrs(alleReparaties.filter(r =>
-      r.monteur_id === m.id && String(r.status) !== '519' && matchCode(r)
+      r.monteur_id === m.id && !isRegelAfgerond(r) && matchCode(r)
     ));
     const kleur = monteurKleurMap[String(m.id)] || '#888';
 
@@ -2704,7 +2704,7 @@ function afgerondOpdrachtKaartHTML(logs, monteurMap) {
 
   // Volledigheid bepalen via alleReparaties
   const jRegels      = repRegels.filter(r => (r.doorsluizenjn||'').toUpperCase()==='J' && !isInstructieRegel(r));
-  const afgerondAantal = jRegels.filter(r => String(r.status) === '519').length;
+  const afgerondAantal = jRegels.filter(isRegelAfgerond).length;
   const volledig     = jRegels.length > 0 && afgerondAantal === jRegels.length;
   const gedeeltelijk = afgerondAantal > 0 && afgerondAantal < jRegels.length;
 
@@ -2944,7 +2944,7 @@ function maakOpenGeclaimdKaartHTML(regels, nr, statusType, monteurMap, repLookup
     const mont  = monteurMap[r.monteur_id];
     const mNaam = r.monteur_naam || mont?.naam || '';
     const st    = String(r.status);
-    const afg   = st === '519';
+    const afg   = isRegelAfgerond(r);
     const claim = st === statusInBehandeling(r);
     const ond   = st === '480';
 
@@ -3047,7 +3047,7 @@ async function renderOpdrachten() {
   const onderdelenGroepen  = [];
 
   Object.entries(perOpdracht).forEach(([nr, regels]) => {
-    const alleAfgerond = regels.every(r => String(r.status) === '519');
+    const alleAfgerond = regels.every(isRegelAfgerond);
     const heeftClaim   = regels.some(r => String(r.status) === statusInBehandeling(r));
     const heeftOnd     = regels.some(r => String(r.status) === '480');
     if (alleAfgerond) return; // valt in afgerond-sectie via log-query
