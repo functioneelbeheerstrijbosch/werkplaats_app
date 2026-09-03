@@ -162,6 +162,15 @@ async function updateReparatieStatus(id, data) {
   if (error) throw error;
 }
 
+// LET OP bij `opdrachtstatus`/`nieuwe_opdrachtstatus` op insertLog()-aanroepen:
+// `reparaties` heeft twee statusvelden. `status` (445/465/470/480/500/519/370)
+// is onze eigen claim/afrond-workflow — wordt hier meteen bijgewerkt, geen
+// sync nodig. `opdrachtstatus` is het losse ERP-veld, alleen ververst door de
+// periodieke MSSQL-sync (elke ~20 min in productie) — dus altijd achter de
+// feiten aan. `opdrachtstatus`/`nieuwe_opdrachtstatus` in reparatie_logs
+// horen daarom bewust bij `r.status` te lezen (vóór/ná-waarde van onze eigen
+// status), niet bij `r.opdrachtstatus` — anders loopt de logging tot wel 20
+// minuten achter op wat er in de app al gebeurd is.
 async function insertLog(data) {
   const { data: row, error } = await sb.from('reparatie_logs').insert(data).select().single();
   if (error) throw error;
@@ -1498,7 +1507,7 @@ async function vrijgeefRegel(id) {
       artikelcode: r.artikelcode,
       artikelomschrijving: r.artikelomschrijving,
       notitie: `Regel vrijgegeven door ${state.monteur.naam}`,
-      opdrachtstatus: r.opdrachtstatus || null,
+      opdrachtstatus: r.status || null,
       nieuwe_opdrachtstatus: nieuweStatus,
     });
     for (const n of nRegels) {
@@ -1557,7 +1566,7 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
           artikelcode: r.artikelcode,
           artikelomschrijving: r.artikelomschrijving,
           notitie: `Hele opdracht vrijgegeven door ${state.monteur.naam}`,
-          opdrachtstatus: r.opdrachtstatus || null,
+          opdrachtstatus: r.status || null,
           nieuwe_opdrachtstatus: nieuweStatus,
         });
         r.status = nieuweStatus;
@@ -1690,7 +1699,7 @@ async function bevestigClaimAlles() {
           toegewezen_door: r.toegewezen_door || 'monteur',
           in_behandeling_op: now,
         });
-        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.opdrachtstatus || null, nieuwe_opdrachtstatus: nieuweStatus });
+        await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
       } catch(e) {
         toast('Fout bij regel ' + (r.regelnummer ?? r.id) + ': ' + e.message);
       }
@@ -2146,7 +2155,7 @@ async function startReparatie() {
       toegewezen_door: r.toegewezen_door || 'monteur',
       in_behandeling_op: now,
     });
-    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.opdrachtstatus || null, nieuwe_opdrachtstatus: nieuweStatus });
+    await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
@@ -2183,7 +2192,7 @@ async function vrijgevenReparatie() {
   try {
     const nieuweStatus = statusOpen(r);
     await updateReparatieStatus(r.id, { status: nieuweStatus, monteur_id: null, in_behandeling_op: null });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.opdrachtstatus || null, nieuwe_opdrachtstatus: nieuweStatus });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'vrijgegeven', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
     await laadReparaties();
     switchTab('open');
     toast('↩ ' + r.opdrachtnr + ' vrijgegeven');
@@ -2291,7 +2300,7 @@ async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
         serienummer: n.serienummer,
         tagnummer: n.tagnummer,
         notitie: 'Automatisch afgerond — alle regels van de opdracht zijn klaar',
-        opdrachtstatus: n.opdrachtstatus || null,
+        opdrachtstatus: n.status || null,
         nieuwe_opdrachtstatus: '519',
       });
     } catch (e) {
@@ -2371,7 +2380,7 @@ async function afrondReparatie(uitkomst) {
       diagnose: diagnose || null,
       werkzaamheden: notitie || null,
       uitkomst: uitkomst || null,
-      opdrachtstatus: r.opdrachtstatus || null,       // status vóór afronden
+      opdrachtstatus: r.status || null,       // status vóór afronden
       nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (519, of 370 bij afgekeurd)
       magazijnlocatie: r.magazijnlocatie || null,
       uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
@@ -2659,7 +2668,7 @@ async function bevestigBulkAfrond() {
           // velden naast de samengeperste 'notitie'.
           diagnose:     rDiagnose || null,
           werkzaamheden: rNotitie || null,
-          opdrachtstatus: r.opdrachtstatus || null,       // status vóór afronden
+          opdrachtstatus: r.status || null,       // status vóór afronden
           nieuwe_opdrachtstatus: '519',           // status ná afronden
           magazijnlocatie: r.magazijnlocatie || null,
           uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
@@ -6241,7 +6250,7 @@ async function zetWachtOpOnderdelen() {
   }
   try {
     await updateReparatieStatus(r.id, { status: '480' });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.opdrachtstatus || null, nieuwe_opdrachtstatus: '480' });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '480' });
     await laadReparaties();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
   } catch(e) { toast('Fout: ' + e.message); }
@@ -6263,7 +6272,7 @@ async function zetVoorraadBeschikbaar(opdrachtnr) {
     for (const r of regels) {
       await updateReparatieStatus(r.id, { status: '445', monteur_id: null, in_behandeling_op: null });
     }
-    await insertLog({ reparatie_id: regels[0].id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'voorraad_beschikbaar', opdrachtnr, regelnummer: regels[0].regelnummer, opdrachtcode: regels[0].opdrachtcode || null, opdrachtstatus: regels[0].opdrachtstatus || null, nieuwe_opdrachtstatus: '445' });
+    await insertLog({ reparatie_id: regels[0].id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'voorraad_beschikbaar', opdrachtnr, regelnummer: regels[0].regelnummer, opdrachtcode: regels[0].opdrachtcode || null, opdrachtstatus: regels[0].status || null, nieuwe_opdrachtstatus: '445' });
     delete state.onderdelenKleuren[opdrachtnr];
     verwijderOnderdelenKleurOpslag(opdrachtnr);
     await laadReparaties();
