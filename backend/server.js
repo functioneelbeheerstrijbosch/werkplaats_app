@@ -163,6 +163,10 @@ app.post('/api/sync/importeer', authMiddleware, async (req, res) => {
         for (const k of ['aangemaakt_op', 'reden_datum', 'uiterste_datum_afdeling']) {
           if (rij[k]) rij[k] = fixDatum(rij[k]);
         }
+        // Zelfde fallback als bouwApiRij()/bouwMysqlRij() in sync.js: deze
+        // MAPPING kent geen 'status', dus zonder dit zou een nieuwe regel
+        // hier met status NULL aangemaakt worden i.p.v. de ERP-status.
+        if (!rij.status && rij.opdrachtstatus != null) rij.status = String(rij.opdrachtstatus);
 
         const [bestaand] = await db.query(
           'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',

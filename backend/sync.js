@@ -109,6 +109,10 @@ function bouwMysqlRij(mssqlRij) {
 
   if (rij.doorsluizenjn !== undefined) rij.doorsluizenjn = normaliseerDoorsluizen(rij.doorsluizenjn);
   if (rij.aangemaakt_op)               rij.aangemaakt_op = normaliseerDatum(rij.aangemaakt_op);
+  // Defensieve fallback voor het geval de SQL-view een keer NULL teruggeeft
+  // op status — zie dezelfde fallback (en de uitleg waarom) in bouwApiRij()
+  // hieronder, die dit voor de daadwerkelijk actieve sync oplost.
+  if (!rij.status && rij.opdrachtstatus != null) rij.status = rij.opdrachtstatus;
   if (rij.status !== undefined)        rij.status        = String(rij.status);
 
   return rij;
@@ -292,6 +296,15 @@ function bouwApiRij(apiRij) {
   for (const k of ['aangemaakt_op', 'reden_datum', 'uiterste_datum_afdeling']) {
     if (rij[k]) rij[k] = normaliseerDatum(rij[k]);
   }
+  // De Strijbosch REST API levert geen los 'status'-veld, alleen
+  // 'opdrachtstatus' — zonder deze fallback start een nieuwe regel met
+  // status NULL i.p.v. de actuele ERP-status, en wordt 'm pas via de
+  // vangnet-regel in de claimbaar-check (elke vrije J-regel is sowieso
+  // claimbaar, ongeacht status) toch nog zichtbaar, maar met een status die
+  // nergens anders (badges, filters, manager-tool) correct herkend wordt.
+  // Alleen relevant bij het aanmaken — 'status' staat in BESCHERMDE_VELDEN,
+  // dus een update negeert dit veld toch al.
+  if (!rij.status && rij.opdrachtstatus != null) rij.status = String(rij.opdrachtstatus);
   return rij;
 }
 
