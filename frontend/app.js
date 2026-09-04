@@ -6183,6 +6183,18 @@ function switchTab(name) {
   if (name === 'nov'        && !heeftNovToegang())                 return;
   if (name === 'locatie'    && !state.monteur?.locatie_aanpassen) return;
   if (name === 'prep'       && !state.monteur?.werkvoorbereider)  return;
+
+  // Zoekvelden legen bij het wisselen van tabblad — getypte zoektekst hoort
+  // niet te blijven staan (en het filter actief te houden) als je naar een
+  // ander tabblad gaat en later terugkomt.
+  const zoekVelden = ['af-open-zoek', 'af-beh-zoek', 'af-af-zoek', 'af-wg-zoek'];
+  let zoekGewist = false;
+  zoekVelden.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value) { el.value = ''; zoekGewist = true; }
+  });
+  if (zoekGewist) renderLists();
+
   ['open','behandeling','afgerond','onderdelen','witgoed','nov','locatie','prep','config'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.remove('active');
     document.getElementById('view-'+t)?.classList.remove('active');
