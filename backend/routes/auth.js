@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
         werkplaats_planning: !!monteur.werkplaats_planning,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '1d' }
     );
 
     // Stuur wachtwoord_hash nooit terug naar de client

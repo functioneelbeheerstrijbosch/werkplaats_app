@@ -132,6 +132,19 @@ class QueryBuilder {
     try {
       const res  = await fetch(fullUrl, opties);
 
+      // Token ongeldig/verlopen — backend geeft dan altijd 401 (zie
+      // middleware/auth.js). Centraal hier afvangen i.p.v. per aanroepplek:
+      // token lokaal wissen en de gebruiker terugsturen naar het
+      // inlogscherm, anders blijft de app hangen op een lege/kapotte
+      // databalk zonder duidelijke reden. wplaatsSessieVerlopen() wordt
+      // gedefinieerd in app.js (plain global script, geen modules, dus pas
+      // nodig tegen de tijd dat dit daadwerkelijk aangeroepen wordt).
+      if (res.status === 401) {
+        _setToken(null);
+        localStorage.removeItem('wplaats_monteur');
+        if (typeof window.wplaatsSessieVerlopen === 'function') window.wplaatsSessieVerlopen();
+      }
+
       // maybeSingle: geen rij gevonden is geen fout
       if (this._maybeSingle && res.status === 406) {
         return { data: null, error: null };

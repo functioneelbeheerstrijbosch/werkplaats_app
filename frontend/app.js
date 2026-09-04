@@ -2113,12 +2113,31 @@ function showLogout() {
   openModal('modal-logout');
 }
 
-function logout() {
-  closeModal('modal-logout');
+// Verbergt de app en toont het inlogscherm — gedeeld door het handmatige
+// 'Afmelden' (logout()) en door een automatische sessie-verlopen-redirect
+// (wplaatsSessieVerlopen() hieronder, aangeroepen vanuit api.js bij een 401
+// op een API-aanroep).
+function toonInlogscherm() {
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-screen').classList.remove('hidden');
   state.monteur = null;
 }
+
+async function logout() {
+  closeModal('modal-logout');
+  await sb.auth.signOut(); // wist token/monteur uit localStorage
+  toonInlogscherm();
+}
+
+// Aangeroepen vanuit api.js zodra een API-aanroep een 401 teruggeeft
+// (token ongeldig/verlopen) — stuurt de gebruiker terug naar het
+// inlogscherm i.p.v. de app te laten hangen op een lege/kapotte databalk.
+// api.js heeft de token al lokaal gewist vóórdat dit aangeroepen wordt.
+window.wplaatsSessieVerlopen = function() {
+  toonInlogscherm();
+  const fout = document.getElementById('login-fout');
+  if (fout) fout.textContent = 'Sessie verlopen — log opnieuw in.';
+};
 
 // ── ACTIES ────────────────────────────────────────────────────
 async function startReparatie() {
