@@ -26,6 +26,7 @@ const TOEGESTANE_TABELLEN = new Set([
   'vertalingen',
   'bug_meldingen',
   'postcodes',
+  'STNRs',
 ]);
 
 // ── Beperkte set toegestane 'embeds' (Supabase-achtige geneste select,

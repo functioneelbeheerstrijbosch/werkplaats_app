@@ -987,6 +987,11 @@ function groepCardHTML(regels, mijnId, modus, logs) {
     if (forceerInzien) {
       actieHTML = `<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">onderdeel</span>`;
     } else if (modus === 'behandeling') {
+      // Alleen bij HUUR/RUIL én een gevulde STNR — toont de andere
+      // artikelcodes binnen dezelfde STNR-groep, zie toonStnrGroep().
+      const stnrKnop = isHuurRuilCode(r) && r.stnr
+        ? `<button class="claim-btn" onclick="event.stopPropagation();toonStnrGroep('${r.id}')" style="background:none;color:var(--info);border:1px solid var(--border)" title="Andere artikelcodes in dit STNR">♻️</button>`
+        : '';
       const historieKnop = r.artikelcode
         ? `<button class="claim-btn" onclick="event.stopPropagation();toonHistorieVoorId('${r.id}')" style="background:none;color:var(--info);border:1px solid var(--border)" title="Reparatiehistorie">📋</button>`
         : '';
@@ -997,6 +1002,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
         ? `<button class="claim-btn" onclick="event.stopPropagation();zetWachtOpOnderdelenRegel('${r.id}')" style="background:none;color:#f5a623;border:1px solid #f5a623" title="Wacht op onderdelen">📦</button>`
         : '';
       actieHTML = `<div style="display:flex;gap:6px;align-items:center">
+        ${stnrKnop}
         ${historieKnop}
         ${vrijgeefOfVerwijder}
         ${wachtOnderdelenKnop}
@@ -2239,6 +2245,13 @@ function stopGeluid() {
 function isRepCode(r) {
   const code = (r?.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
+}
+
+// HUUR/RUIL-opdrachten — zelfde onderscheid als PREP_CODES/vereistTagnummer(),
+// hier gebruikt om de STNR-alternatievenknop te tonen (zie toonStnrGroep()).
+function isHuurRuilCode(r) {
+  const code = (r?.opdrachtcode || '').toUpperCase();
+  return code === 'HUUR' || code === 'RUIL';
 }
 
 // Statusverloop verschilt per soort regel, bepaald via dezelfde isRepCode()
@@ -3637,6 +3650,50 @@ async function slaRegelOp() {
     document.getElementById('mr-artikelcode').focus();
   } catch(e) {
     fout.textContent = 'Fout: ' + e.message;
+  }
+}
+
+// ── STNR-ALTERNATIEVEN (HUUR/RUIL) ─────────────────────────────
+// Toont de andere artikelcodes die onder dezelfde STNR vallen (bv. bij
+// HUUR/RUIL-opdrachten, waar een gelijkwaardig vervangend apparaat mag
+// worden meegegeven) — data komt uit de STNRs-tabel (los geïmporteerd
+// vanuit een CSV, zie internal-docs).
+async function toonStnrGroep(id) {
+  const r = state.reparaties.find(x => x.id === id);
+  if (!r?.stnr) return;
+
+  document.getElementById('sg-stnr').textContent   = 'STNR ' + r.stnr;
+  document.getElementById('sg-huidig').textContent = 'Huidig: ' + ([r.artikelcode, r.artikelomschrijving].filter(Boolean).join(' · ') || '—');
+  const lijst = document.getElementById('sg-lijst');
+  lijst.innerHTML = '<div class="geschiedenis-leeg">Laden...</div>';
+  openModal('modal-stnr');
+
+  if (state.demoMode) {
+    lijst.innerHTML = '<div class="geschiedenis-leeg">Geen STNR-data beschikbaar in demo-modus</div>';
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.from('STNRs')
+      .select('artikelcode, omschrijving1, merk')
+      .eq('stnr', r.stnr);
+    if (error) throw error;
+
+    const anderen = (data || []).filter(x => x.artikelcode !== r.artikelcode);
+    if (!anderen.length) {
+      lijst.innerHTML = '<div class="geschiedenis-leeg">Geen andere artikelcodes gevonden in dit STNR</div>';
+      return;
+    }
+
+    lijst.innerHTML = anderen.map(x => `
+      <div class="geschiedenis-item">
+        <div style="font-size:13px;font-weight:600;font-family:var(--mono)">${esc(x.artikelcode)}</div>
+        <div style="font-size:12px;color:var(--text);margin-top:2px">${esc(x.omschrijving1) || '—'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${esc(x.merk) || '—'}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    lijst.innerHTML = `<div class="geschiedenis-leeg">Fout: ${esc(e.message)}</div>`;
   }
 }
 
