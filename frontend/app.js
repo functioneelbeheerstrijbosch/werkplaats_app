@@ -990,7 +990,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
       // Alleen bij HUUR/RUIL én een gevulde STNR — toont de andere
       // artikelcodes binnen dezelfde STNR-groep, zie toonStnrGroep().
       const stnrKnop = isHuurRuilCode(r) && r.stnr
-        ? `<button class="claim-btn" onclick="event.stopPropagation();toonStnrGroep('${r.id}')" style="background:none;color:var(--info);border:1px solid var(--border)" title="Andere artikelcodes in dit STNR">♻️</button>`
+        ? `<button class="claim-btn" onclick="event.stopPropagation();toonStnrGroep('${r.id}')" style="background:none;color:var(--muted);border:1px solid var(--border);font-weight:700" title="Andere artikelcodes in dit STNR">ST</button>`
         : '';
       const historieKnop = r.artikelcode
         ? `<button class="claim-btn" onclick="event.stopPropagation();toonHistorieVoorId('${r.id}')" style="background:none;color:var(--info);border:1px solid var(--border)" title="Reparatiehistorie">📋</button>`
@@ -3685,13 +3685,30 @@ async function toonStnrGroep(id) {
       return;
     }
 
-    lijst.innerHTML = anderen.map(x => `
-      <div class="geschiedenis-item">
-        <div style="font-size:13px;font-weight:600;font-family:var(--mono)">${esc(x.artikelcode)}</div>
-        <div style="font-size:12px;color:var(--text);margin-top:2px">${esc(x.omschrijving1) || '—'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px">${esc(x.merk) || '—'}</div>
+    lijst.innerHTML = `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">
+              <th style="padding:6px 8px">STNR</th>
+              <th style="padding:6px 8px">Artikelcode</th>
+              <th style="padding:6px 8px">Omschrijving</th>
+              <th style="padding:6px 8px">Merk</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${anderen.map(x => `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 8px;font-family:var(--mono);white-space:nowrap">${esc(r.stnr)}</td>
+                <td style="padding:6px 8px;font-family:var(--mono);font-weight:600;white-space:nowrap">${esc(x.artikelcode)}</td>
+                <td style="padding:6px 8px">${esc(x.omschrijving1) || '—'}</td>
+                <td style="padding:6px 8px;color:var(--muted);white-space:nowrap">${esc(x.merk) || '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
-    `).join('');
+    `;
   } catch (e) {
     lijst.innerHTML = `<div class="geschiedenis-leeg">Fout: ${esc(e.message)}</div>`;
   }
