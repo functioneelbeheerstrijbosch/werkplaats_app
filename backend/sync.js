@@ -185,14 +185,24 @@ async function syncReparaties(pool) {
       gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
       const [bestaand] = await db.query(
-        'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+        'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
         [rij.opdrachtnr, rij.regelnummer ?? 1]
       );
 
       if (bestaand.length > 0) {
-        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden
+        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden —
+        // BEHALVE 'status' zolang een regel nog volledig onaangeroerd is
+        // (nog niet geclaimd/in behandeling/afgerond). Tot dat moment is
+        // 'status' nog geen door de app beheerd veld maar simpelweg de
+        // meest recente ERP-status, en moet 'ie — net als bij het aanmaken
+        // — blijven meebewegen met opdrachtstatus. Zodra een monteur de
+        // regel claimt, bevriest 'status' zoals gebruikelijk.
+        const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+        const teBeschermen = nogOnaangeroerd
+          ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+          : BESCHERMDE_VELDEN;
         const updateRij = Object.fromEntries(
-          Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+          Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
         );
         const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
         if (setCols) {
@@ -338,13 +348,20 @@ async function syncVanApi() {
         gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
         const [bestaand] = await db.query(
-          'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+          'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
           [rij.opdrachtnr, rij.regelnummer ?? 1]
         );
 
         if (bestaand.length > 0) {
+          // Zie de uitleg bij dezelfde constructie in syncReparaties()
+          // hierboven: 'status' blijft meebewegen met opdrachtstatus zolang
+          // een regel nog niet door een monteur is aangeraakt.
+          const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+          const teBeschermen = nogOnaangeroerd
+            ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+            : BESCHERMDE_VELDEN;
           const updateRij = Object.fromEntries(
-            Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+            Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
           );
           const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
           if (setCols) {
