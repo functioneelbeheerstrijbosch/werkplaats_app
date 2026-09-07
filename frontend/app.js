@@ -2261,24 +2261,16 @@ function isHuurRuilCode(r) {
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
 function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
 
-// Eindstatus bij afronden: 519 als dit de laatste nog openstaande J-regel(s)
-// van de opdracht waren (hele order nu compleet, zelfde J-regel-definitie
-// als voltooiNRegelsIndienCompleet() hieronder), anders 505 (deze regel(s)
-// klaar, de rest van de order nog niet). Geldt voor reparatie én levering
-// gelijk — alleen 'afgekeurd' (370, bij afronden van een REP-regel) valt
-// hierbuiten, zie afrondReparatie(). meeAfgerondeIds = regel-ids die in
-// dezelfde actie worden afgerond (zichzelf voor een losse regel, de hele
-// batch bij bulk-afronden) — die tellen als 'al klaar' voor deze check,
-// ook al staat dat nog niet in state.reparaties op het moment van aanroepen.
+// Eindstatus bij afronden: altijd 505, ook als dit de laatste nog
+// openstaande J-regel van de opdracht was (dus nooit meer automatisch naar
+// 519 — dat was eerder wel zo, maar is op verzoek teruggedraaid). Geldt voor
+// reparatie én levering gelijk — alleen 'afgekeurd' (370, bij afronden van
+// een REP-regel) valt hierbuiten, zie afrondReparatie(). meeAfgerondeIds
+// wordt niet meer gebruikt voor de status zelf, maar blijft in de
+// signatuur staan zodat bestaande aanroepen (bulk-afronden e.d.)
+// ongewijzigd kunnen blijven.
 function statusAfgerond(r, meeAfgerondeIds = [r.id]) {
-  const idsSet = new Set(meeAfgerondeIds.map(String));
-  const overigeJRegels = state.reparaties.filter(r2 =>
-    r2.opdrachtnr === r.opdrachtnr &&
-    (r2.doorsluizenjn || '').toUpperCase() === 'J' &&
-    !isInstructieRegel(r2) &&
-    !idsSet.has(String(r2.id))
-  );
-  return overigeJRegels.every(isRegelAfgerond) ? '519' : '505';
+  return '505';
 }
 
 function isRepUitkomstRegel(r) {
@@ -2331,13 +2323,13 @@ async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
   if (!nRegels.length) return;
 
   if (state.demoMode) {
-    nRegels.forEach(n => { n.status = '519'; n.afgerond_op = now; });
+    nRegels.forEach(n => { n.status = '505'; n.afgerond_op = now; });
     return;
   }
 
   for (const n of nRegels) {
     try {
-      await updateReparatieStatus(n.id, { status: '519', afgerond_op: now });
+      await updateReparatieStatus(n.id, { status: '505', afgerond_op: now });
       await insertLog({
         reparatie_id: n.id,
         monteur_id: state.monteur.id,
@@ -2353,7 +2345,7 @@ async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
         tagnummer: n.tagnummer,
         notitie: 'Automatisch afgerond — alle regels van de opdracht zijn klaar',
         opdrachtstatus: n.status || null,
-        nieuwe_opdrachtstatus: '519',
+        nieuwe_opdrachtstatus: '505',
       });
     } catch (e) {
       toast('Fout bij automatisch afronden onderdeel: ' + e.message);
@@ -2396,8 +2388,7 @@ async function afrondReparatie(uitkomst) {
   // Afgekeurd apparaat krijgt een eigen eindstatus (370), ongeacht of de
   // order daarmee compleet is — alleen bereikbaar via de uitkomst-vraag
   // hierboven (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
-  // Anders: 519 (order nu compleet) of 505 (order nog niet compleet), zie
-  // statusAfgerond().
+  // Anders: altijd 505, zie statusAfgerond().
   const eindStatus = uitkomst === 'afgekeurd' ? '370' : statusAfgerond(r);
 
   if (state.demoMode) {
@@ -2435,7 +2426,7 @@ async function afrondReparatie(uitkomst) {
       werkzaamheden: notitie || null,
       uitkomst: uitkomst || null,
       opdrachtstatus: r.status || null,       // status vóór afronden
-      nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (519, of 370 bij afgekeurd)
+      nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (505, of 370 bij afgekeurd)
       magazijnlocatie: r.magazijnlocatie || null,
       uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
       gebruikte_onderdelen: onderdelen || null,
@@ -2673,7 +2664,7 @@ async function bevestigBulkAfrond() {
     const demoOpdrachtnr  = eersteRDemo?.opdrachtnr;
     // Vóór het muteren berekend — statusAfgerond() kijkt naar de huidige
     // (nog ongewijzigde) state van de overige regels van de opdracht.
-    const demoEindStatus = eersteRDemo ? statusAfgerond(eersteRDemo, bulkAfrondIds) : '519';
+    const demoEindStatus = eersteRDemo ? statusAfgerond(eersteRDemo, bulkAfrondIds) : '505';
     bulkAfrondIds.forEach(id => {
       const r = state.reparaties.find(x => x.id === id);
       if (r) { r.status = demoEindStatus; r.afgerond_op = now; }
@@ -2734,7 +2725,7 @@ async function bevestigBulkAfrond() {
           diagnose:     rDiagnose || null,
           werkzaamheden: rNotitie || null,
           opdrachtstatus: r.status || null,       // status vóór afronden
-          nieuwe_opdrachtstatus: bulkEindStatus,  // status ná afronden (519 of 505)
+          nieuwe_opdrachtstatus: bulkEindStatus,  // status ná afronden (505)
           magazijnlocatie: r.magazijnlocatie || null,
           uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
           bestede_tijd_minuten: tijdPerRegel[id] || null,

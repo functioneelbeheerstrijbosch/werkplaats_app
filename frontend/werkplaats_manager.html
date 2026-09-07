@@ -1042,12 +1042,13 @@ async function planningFetch(pad, opties = {}) {
 }
 
 // REP-opdrachten (behalve REPKR/REPPR) lopen als reparatie door de
-// statussen 445→503→(505/519), overige opdrachtcodes (leveringen) als
-// 500→501→(505/519) — zelfde onderscheid en functienamen als frontend/app.js.
-// 505 = regel klaar, order nog niet compleet; 519 = regel klaar én hele
-// order nu compleet (bepaald bij afronden, zie statusAfgerond() in app.js —
-// de manager-tool rondt zelf geen regels af, dus heeft geen eigen kopie
-// nodig). isRegelAfgerond() hieronder herkent beide via afgerond_op.
+// statussen 445→503→505, overige opdrachtcodes (leveringen) als
+// 500→501→505 — zelfde onderscheid en functienamen als frontend/app.js.
+// 505 = regel afgerond (altijd, ook als daarmee de hele order compleet is —
+// zie statusAfgerond() in app.js). 519 komt alleen nog voor in oudere,
+// vóór die wijziging afgeronde regels; de manager-tool rondt zelf geen
+// regels af, dus heeft geen eigen kopie nodig. isRegelAfgerond() hieronder
+// herkent beide via afgerond_op.
 function isRepCode(r) {
   const code = (r?.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
