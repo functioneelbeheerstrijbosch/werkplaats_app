@@ -4114,10 +4114,24 @@ function _volgendInQueue() {
 async function laadVragensets() {
   if (state.demoMode) return;
   try {
-    const { data } = await sb.from('vragensets')
-      .select('*, vragen(*, antwoordopties(*))')
-      .order('aangemaakt_op', { ascending: false });
-    alleVragensets = data || [];
+    // Geen .select('*, vragen(*, antwoordopties(*)))') — de generieke
+    // backend ondersteunt alleen een 1-op-1 embed (fk → pk, zie
+    // TOEGESTANE_EMBEDS in backend/routes/api.js, nu alleen
+    // reparaties→monteurs), geen 1-op-veel zoals hier nodig is. Die
+    // geneste select werd stil genegeerd (viel terug op '*'), waardoor
+    // s.vragen altijd undefined bleef — vandaar "0 vragen" ook ná succesvol
+    // opslaan. Vragen/antwoordopties daarom apart ophalen en hier zelf
+    // nesten (aantallen zijn klein, geen paginering nodig).
+    const [{ data: sets }, { data: vragen }, { data: opties }] = await Promise.all([
+      sb.from('vragensets').select('*').order('aangemaakt_op', { ascending: false }),
+      sb.from('vragen').select('*'),
+      sb.from('antwoordopties').select('*'),
+    ]);
+    const optiesPerVraag = {};
+    (opties || []).forEach(o => (optiesPerVraag[o.vraag_id] ??= []).push(o));
+    const vragenPerSet = {};
+    (vragen || []).forEach(v => (vragenPerSet[v.vragenset_id] ??= []).push({ ...v, antwoordopties: optiesPerVraag[v.id] || [] }));
+    alleVragensets = (sets || []).map(s => ({ ...s, vragen: vragenPerSet[s.id] || [] }));
     if (state.monteur?.is_admin) renderAdminVragensets();
   } catch { alleVragensets = []; }
 }
