@@ -134,7 +134,7 @@ async function fetchReparaties() {
   while (true) {
     const { data, error } = await sb
       .from('reparaties')
-      .select('id, opdrachtnr, regelnummer, opdrachtcode, abonneecode, handeling, klant_naam, klant_nummer, betalercode, artikelcode, artikelomschrijving, merk, model, serienummer, tagnummer, memogeschiedenis, klacht, prioriteit, status, opdrachtstatus, soort, aantal, doorsluizenjn, tagnrscannenjn, werkplaats, productgroep, magazijnlocatie, landcode, organisatie, monteur_id, toegewezen_door, uiterste_datum_afdeling, reden_datum, aangemaakt_op, in_behandeling_op, afgerond_op, postcode, monteurs(naam, initialen)')
+      .select('id, opdrachtnr, regelnummer, opdrachtcode, abonneecode, handeling, klant_naam, klant_nummer, betalercode, artikelcode, artikelomschrijving, merk, model, serienummer, tagnummer, memogeschiedenis, klacht, prioriteit, status, opdrachtstatus, soort, aantal, doorsluizenjn, tagnrscannenjn, werkplaats, productgroep, stnr, magazijnlocatie, landcode, organisatie, monteur_id, toegewezen_door, uiterste_datum_afdeling, reden_datum, aangemaakt_op, in_behandeling_op, afgerond_op, postcode, monteurs(naam, initialen)')
       .order('aangemaakt_op', { ascending: false })
       .range(offset, offset + BATCH - 1);
 
