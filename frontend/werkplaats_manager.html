@@ -1478,7 +1478,12 @@ function renderMonteurs() {
   const verborgenIds = alleVerborgenIds();
   const jAfgerond   = jVolledigAfgerondSet();
   const volAfgerond = volledigAfgerondSet();
-  alleMonteurs.filter(m => !verborgenIds.includes(m.id) && m.productieplanning).forEach(m => {
+  // Was gefilterd op het aparte 'productieplanning'-vlaggetje — daardoor
+  // verscheen een monteur met werkplaats_toegang (kan dus gewoon opdrachten
+  // claimen in de werkplaats-app) niet als kolom hier totdat een admin ook
+  // nog los 'Productieplanning' aanzette. Iedereen met werkplaats-rechten
+  // hoort hier zichtbaar te zijn.
+  alleMonteurs.filter(m => !verborgenIds.includes(m.id) && m.werkplaats_toegang).forEach(m => {
     const alleRegels = alleReparaties.filter(r => r.monteur_id === m.id);
     // Sluit volledig afgeronde opdrachten uit:
     // 1. Alle J-regels van de opdracht zijn afgerond (dan verdwijnen ook de N-regels)
