@@ -1042,14 +1042,18 @@ async function planningFetch(pad, opties = {}) {
 }
 
 // REP-opdrachten (behalve REPKR/REPPR) lopen als reparatie door de
-// statussen 445→465→519, overige opdrachtcodes (leveringen) als
-// 500→470→519 — zelfde onderscheid en functienamen als frontend/app.js.
+// statussen 445→503→(505/519), overige opdrachtcodes (leveringen) als
+// 500→501→(505/519) — zelfde onderscheid en functienamen als frontend/app.js.
+// 505 = regel klaar, order nog niet compleet; 519 = regel klaar én hele
+// order nu compleet (bepaald bij afronden, zie statusAfgerond() in app.js —
+// de manager-tool rondt zelf geen regels af, dus heeft geen eigen kopie
+// nodig). isRegelAfgerond() hieronder herkent beide via afgerond_op.
 function isRepCode(r) {
   const code = (r?.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
 }
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
-function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
 
 let alleReparaties  = [];
 let alleMonteurs    = [];
@@ -1305,8 +1309,9 @@ function resetDashFilter() {
 // Een regel is afgerond als status=519 OF als afgerond_op gevuld is.
 // Dit voorkomt dat externe syncs (Google Cloud) die status terugzetten naar 445
 // afgeronde opdrachten opnieuw laten verschijnen. De afgerond_op-fallback vangt
-// ook status 370 (afgekeurd bij afronden, zie afrondReparatie() in app.js) —
-// daarom hier gebruiken i.p.v. rechtstreeks op '519' te vergelijken.
+// ook status 370 (afgekeurd) en 505 (regel klaar, order nog niet compleet —
+// zie statusAfgerond() in frontend/app.js) — daarom hier gebruiken i.p.v.
+// rechtstreeks op '519' te vergelijken.
 function isRegelAfgerond(r) {
   return String(r.status) === '519' || !!r.afgerond_op;
 }

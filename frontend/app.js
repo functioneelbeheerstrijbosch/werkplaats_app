@@ -2255,11 +2255,31 @@ function isHuurRuilCode(r) {
 }
 
 // Statusverloop verschilt per soort regel, bepaald via dezelfde isRepCode()
-// als hierboven: reparaties lopen 445 (open) → 465 (in behandeling) → 519
-// (afgerond), leveringen 500 (open) → 470 (in behandeling) → 519. Afronden
-// komt voor beide op 519 uit, dus daar is geen aparte functie voor nodig.
+// als hierboven: reparaties lopen 445 (open) → 503 (in behandeling),
+// leveringen 500 (open) → 501 (in behandeling). Witgoed (bevestigAfrondWitgoed
+// e.d.) blijft bewust buiten dit onderscheid — ongewijzigd.
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
-function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
+
+// Eindstatus bij afronden: 519 als dit de laatste nog openstaande J-regel(s)
+// van de opdracht waren (hele order nu compleet, zelfde J-regel-definitie
+// als voltooiNRegelsIndienCompleet() hieronder), anders 505 (deze regel(s)
+// klaar, de rest van de order nog niet). Geldt voor reparatie én levering
+// gelijk — alleen 'afgekeurd' (370, bij afronden van een REP-regel) valt
+// hierbuiten, zie afrondReparatie(). meeAfgerondeIds = regel-ids die in
+// dezelfde actie worden afgerond (zichzelf voor een losse regel, de hele
+// batch bij bulk-afronden) — die tellen als 'al klaar' voor deze check,
+// ook al staat dat nog niet in state.reparaties op het moment van aanroepen.
+function statusAfgerond(r, meeAfgerondeIds = [r.id]) {
+  const idsSet = new Set(meeAfgerondeIds.map(String));
+  const overigeJRegels = state.reparaties.filter(r2 =>
+    r2.opdrachtnr === r.opdrachtnr &&
+    (r2.doorsluizenjn || '').toUpperCase() === 'J' &&
+    !isInstructieRegel(r2) &&
+    !idsSet.has(String(r2.id))
+  );
+  return overigeJRegels.every(isRegelAfgerond) ? '519' : '505';
+}
 
 function isRepUitkomstRegel(r) {
   const code = (r.opdrachtcode || '').toUpperCase();
@@ -2373,10 +2393,12 @@ async function afrondReparatie(uitkomst) {
 
   closeModal('modal-afrond');
   const now = new Date().toISOString();
-  // Afgekeurd apparaat krijgt een eigen eindstatus (370) i.p.v. de normale
-  // afrond-status 519 — alleen bereikbaar via de uitkomst-vraag hierboven
-  // (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
-  const eindStatus = uitkomst === 'afgekeurd' ? '370' : '519';
+  // Afgekeurd apparaat krijgt een eigen eindstatus (370), ongeacht of de
+  // order daarmee compleet is — alleen bereikbaar via de uitkomst-vraag
+  // hierboven (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
+  // Anders: 519 (order nu compleet) of 505 (order nog niet compleet), zie
+  // statusAfgerond().
+  const eindStatus = uitkomst === 'afgekeurd' ? '370' : statusAfgerond(r);
 
   if (state.demoMode) {
     r.status = eindStatus;
@@ -2647,10 +2669,14 @@ async function bevestigBulkAfrond() {
 
   if (state.demoMode) {
     const now = new Date().toISOString();
-    const demoOpdrachtnr = state.reparaties.find(x => x.id === bulkAfrondIds[0])?.opdrachtnr;
+    const eersteRDemo   = state.reparaties.find(x => x.id === bulkAfrondIds[0]);
+    const demoOpdrachtnr  = eersteRDemo?.opdrachtnr;
+    // Vóór het muteren berekend — statusAfgerond() kijkt naar de huidige
+    // (nog ongewijzigde) state van de overige regels van de opdracht.
+    const demoEindStatus = eersteRDemo ? statusAfgerond(eersteRDemo, bulkAfrondIds) : '519';
     bulkAfrondIds.forEach(id => {
       const r = state.reparaties.find(x => x.id === id);
-      if (r) { r.status = '519'; r.afgerond_op = now; }
+      if (r) { r.status = demoEindStatus; r.afgerond_op = now; }
     });
     if (demoOpdrachtnr) await voltooiNRegelsIndienCompleet(demoOpdrachtnr, now);
     renderLists(); switchTab('afgerond');
@@ -2662,12 +2688,19 @@ async function bevestigBulkAfrond() {
   startVragenQueue(bulkAfrondIds, async () => {
     const now = new Date().toISOString();
     const gezienOpdrachtnrsBulk = new Set();
-    let bulkOpdrachtnr = null;
+    let bulkOpdrachtnr  = null;
+    let bulkEindStatus  = null;
     try {
       for (const id of bulkAfrondIds) {
         const r = state.reparaties.find(x => x.id === id);
         if (!r) continue;
-        if (!bulkOpdrachtnr) bulkOpdrachtnr = r.opdrachtnr;
+        if (!bulkOpdrachtnr) {
+          bulkOpdrachtnr = r.opdrachtnr;
+          // Vóór laadReparaties() berekend — statusAfgerond() kijkt naar de
+          // huidige state van de overige regels van de opdracht, en de hele
+          // batch telt hierbij als 'al klaar' (zie meeAfgerondeIds).
+          bulkEindStatus = statusAfgerond(r, bulkAfrondIds);
+        }
         const vragenItems = [...(vragenNotities.get(id) || [])];
         if (!gezienOpdrachtnrsBulk.has(r.opdrachtnr)) {
           gezienOpdrachtnrsBulk.add(r.opdrachtnr);
@@ -2681,7 +2714,7 @@ async function bevestigBulkAfrond() {
           vragenItems.length ? vragenItems.join('\n')       : '',
         ].filter(Boolean).join('\n\n');
 
-        await updateReparatieStatus(id, { status: '519', afgerond_op: now });
+        await updateReparatieStatus(id, { status: bulkEindStatus, afgerond_op: now });
         const logRij = await insertLog({
           reparatie_id: id,
           monteur_id:   state.monteur.id,
@@ -2701,7 +2734,7 @@ async function bevestigBulkAfrond() {
           diagnose:     rDiagnose || null,
           werkzaamheden: rNotitie || null,
           opdrachtstatus: r.status || null,       // status vóór afronden
-          nieuwe_opdrachtstatus: '519',           // status ná afronden
+          nieuwe_opdrachtstatus: bulkEindStatus,  // status ná afronden (519 of 505)
           magazijnlocatie: r.magazijnlocatie || null,
           uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
           bestede_tijd_minuten: tijdPerRegel[id] || null,
@@ -3471,7 +3504,10 @@ async function startVoorraadReparatie() {
       aantal:            aantal,
       klacht:            'Wordt vastgelegd na reparatie',
       prioriteit:        vrdPrio,
-      status:            '465',
+      // Altijd 'in behandeling reparatie' — voorraadregels hebben geen
+      // opdrachtcode, dus statusInBehandeling() (die op isRepCode() steunt)
+      // zou hier ten onrechte de leverings-status teruggeven.
+      status:            '503',
       monteur_id:        state.monteur.id,
       in_behandeling_op: new Date().toISOString(),
       tagnrscannenjn:    tagnrJn ? 'J' : null,
