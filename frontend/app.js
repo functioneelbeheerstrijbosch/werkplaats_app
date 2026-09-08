@@ -2275,8 +2275,11 @@ function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
 // nog niet geclaimde regel volgt r.status de actuele opdrachtstatus (zie de
 // sync-fix in backend/sync.js), dus dit dekt zowel net-binnengekomen als
 // langer openstaande regels.
+// Feature-toggle: tijdelijk weer op false gezet op verzoek (487/490 dus
+// weer gewoon claimbaar) — op true zetten om de blokkade weer aan te zetten.
+const NIET_CLAIMBARE_STATUSSEN_ACTIEF = false;
 const NIET_CLAIMBARE_STATUSSEN = new Set(['487', '490']);
-function magClaimen(r) { return !NIET_CLAIMBARE_STATUSSEN.has(String(r.status)); }
+function magClaimen(r) { return !NIET_CLAIMBARE_STATUSSEN_ACTIEF || !NIET_CLAIMBARE_STATUSSEN.has(String(r.status)); }
 
 // Eindstatus bij afronden: altijd 505, ook als dit de laatste nog
 // openstaande J-regel van de opdracht was (dus nooit meer automatisch naar
