@@ -923,6 +923,10 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Feature-toggle: "+ Regel toevoegen" (openRegelModal) tijdelijk uit op
+// verzoek — op true zetten om 'm weer aan te zetten.
+const REGEL_TOEVOEGEN_AAN = false;
+
 function groepCardHTML(regels, mijnId, modus, logs) {
   // modus = 'open' | 'behandeling'
   regels.sort((a, b) => (a.regelnummer ?? 0) - (b.regelnummer ?? 0));
@@ -1246,7 +1250,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
         ${allesClaimen}
         ${allesAfronden}
         ${voorraadFooter}
-        ${(modus !== 'afgerond' && modus !== 'onderdelen') ? `
+        ${(REGEL_TOEVOEGEN_AAN && modus !== 'afgerond' && modus !== 'onderdelen') ? `
         <div style="padding:6px 14px 10px;border-top:1px solid var(--border)">
           <button onclick="event.stopPropagation();openRegelModal('${hoofd.opdrachtnr}')"
             style="width:100%;background:none;border:1px dashed var(--border);border-radius:var(--r);
