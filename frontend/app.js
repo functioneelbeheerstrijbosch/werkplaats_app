@@ -1038,6 +1038,8 @@ function groepCardHTML(regels, mijnId, modus, logs) {
           <span style="font-size:11px;color:var(--muted)">${esc(monteurNaam)}</span>
           <button class="claim-btn" onclick="event.stopPropagation();vrijgeefRegel('${r.id}')" style="background:none;color:var(--danger);border:1px solid var(--danger)">Vrijgeven</button>
         </div>`;
+      } else if (!magClaimen(r)) {
+        actieHTML = `<span style="font-size:11px;color:var(--muted)" title="Status ${esc(r.status)} — niet claimbaar">Niet claimbaar</span>`;
       } else {
         actieHTML = `<button class="claim-btn" onclick="claimRegel('${r.id}',event)">Claimen</button>`;
       }
@@ -1055,7 +1057,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
       : '';
 
     const toonCheckbox = !forceerInzien && !isAfgerond && (
-      (modus === 'open'  && !r.monteur_id) ||
+      (modus === 'open'  && !r.monteur_id && magClaimen(r)) ||
       (modus === 'behandeling' && r.monteur_id === mijnId)
     );
     const checkboxHTML = toonCheckbox
@@ -1097,8 +1099,8 @@ function groepCardHTML(regels, mijnId, modus, logs) {
 
   const regelsHTML = werkRegelsHTML + onderdeelSectieHTML;
 
-  // "Alles claimen" — alleen vrije J-regels
-  const vrijeClaim = werkRegels.filter(r => !r.monteur_id);
+  // "Alles claimen" — alleen vrije, claimbare J-regels
+  const vrijeClaim = werkRegels.filter(r => !r.monteur_id && magClaimen(r));
   const allesClaimen = modus === 'open' && vrijeClaim.length >= 1 && geclaimd === 0
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border)">
         <button class="claim-btn" style="width:100%" onclick="claimAlles(${JSON.stringify(vrijeClaim.map(r => r.id)).replace(/"/g,'&quot;')},event)">
@@ -1682,7 +1684,7 @@ async function bevestigClaimAlles() {
   for (const opdr of betrokkenOpdrachten) {
     const alleJ = state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r));
     if (alleJ.every(r => r.monteur_id || ids.includes(r.id))) {
-      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !r.monteur_id)
+      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !r.monteur_id && magClaimen(r))
         .forEach(r => extraNIds.push(r.id));
     }
   }
@@ -1691,6 +1693,7 @@ async function bevestigClaimAlles() {
   for (const id of alleTeClaimenIds) {
     const r = state.reparaties.find(x => x.id === id);
     if (!r) continue;
+    if (!magClaimen(r)) { toast('Regel ' + (r.regelnummer ?? r.id) + ' overgeslagen — niet meer claimbaar (status ' + r.status + ')'); continue; }
     const nieuweStatus = statusInBehandeling(r);
     if (state.demoMode) {
       r.status = nieuweStatus;
@@ -2149,6 +2152,7 @@ window.wplaatsSessieVerlopen = function() {
 async function startReparatie() {
   const r = state.activeMod;
   if (!r) return;
+  if (!magClaimen(r)) { closeModal('modal-start'); toast('Deze regel is niet meer claimbaar (status ' + r.status + ')'); renderLists(); return; }
   closeModal('modal-start');
   const mijnId = state.monteur.id;
   const opdrachtnr = r.opdrachtnr;
@@ -2162,7 +2166,7 @@ async function startReparatie() {
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     if (alleJ.every(r2 => r2.monteur_id)) {
-      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id)
+      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2))
         .forEach(n => { n.status = statusInBehandeling(n); n.monteur_id = mijnId; n.monteurs = { naam: state.monteur.naam, initialen: state.monteur.initialen }; n.in_behandeling_op = now; });
     }
     renderLists();
@@ -2185,7 +2189,7 @@ async function startReparatie() {
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
     if (alleJGeclaimd) {
-      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id);
+      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2));
       for (const n of nRegels) {
         await updateReparatieStatus(n.id, { status: statusInBehandeling(n), monteur_id: mijnId, toegewezen_door: 'monteur', in_behandeling_op: now });
       }
@@ -2260,6 +2264,15 @@ function isHuurRuilCode(r) {
 // e.d.) blijft bewust buiten dit onderscheid — ongewijzigd.
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
 function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
+
+// Orders met deze (ERP-)statussen blijven gewoon zichtbaar in de werkplaats,
+// maar mogen niet meer geclaimd worden — bewust anders dan status 480 (wacht
+// op onderdelen), die juist helemaal uit de open-lijst verdwijnt. Voor een
+// nog niet geclaimde regel volgt r.status de actuele opdrachtstatus (zie de
+// sync-fix in backend/sync.js), dus dit dekt zowel net-binnengekomen als
+// langer openstaande regels.
+const NIET_CLAIMBARE_STATUSSEN = new Set(['487', '490']);
+function magClaimen(r) { return !NIET_CLAIMBARE_STATUSSEN.has(String(r.status)); }
 
 // Eindstatus bij afronden: altijd 505, ook als dit de laatste nog
 // openstaande J-regel van de opdracht was (dus nooit meer automatisch naar
