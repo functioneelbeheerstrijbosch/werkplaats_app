@@ -163,7 +163,7 @@ async function updateReparatieStatus(id, data) {
 }
 
 // LET OP bij `opdrachtstatus`/`nieuwe_opdrachtstatus` op insertLog()-aanroepen:
-// `reparaties` heeft twee statusvelden. `status` (445/465/470/480/500/519/370)
+// `reparaties` heeft twee statusvelden. `status` (445/465/470/455/500/519/370)
 // is onze eigen claim/afrond-workflow — wordt hier meteen bijgewerkt, geen
 // sync nodig. `opdrachtstatus` is het losse ERP-veld, alleen ververst door de
 // periodieke MSSQL-sync (elke ~20 min in productie) — dus altijd achter de
@@ -500,7 +500,7 @@ function renderLists() {
   // Behandeling: eigen regels individueel tonen
   const behandeling = state.reparaties.filter(r =>
     !isRegelAfgerond(r) && r.monteur_id === mijnId &&
-    r.status !== '480' &&
+    r.status !== '455' &&
     (r.status === statusInBehandeling(r) || (r.doorsluizenjn || '').toUpperCase() === 'J')
   );
 
@@ -521,7 +521,7 @@ function renderLists() {
       .filter(r => {
         if (isRegelAfgerond(r))  return false;
         if (isInstructieRegel(r)) return false;
-        if (r.status === '480') return false; // Wacht op onderdelen — niet claimbaar
+        if (r.status === '455') return false; // Wacht op onderdelen — niet claimbaar
         if (r.monteur_id && r.monteur_id !== mijnId) return false; // geclaimd door iemand anders
         // Standaard claimbaar via status (445/450 = open reparatie, 500 = open levering)
         if ((r.status === statusOpen(r) || r.status === '450') && (r.doorsluizenjn || '').toUpperCase() === 'J') return true;
@@ -709,7 +709,7 @@ function renderLists() {
   document.getElementById('count-afgerond').textContent    = afgerondLogs.length;
 
   // Onderdelen count + render
-  const onderdelenNrs = new Set(state.reparaties.filter(r => r.status === '480').map(r => r.opdrachtnr));
+  const onderdelenNrs = new Set(state.reparaties.filter(r => r.status === '455').map(r => r.opdrachtnr));
   const telOndEl = document.getElementById('count-onderdelen');
   if (telOndEl) telOndEl.textContent = onderdelenNrs.size;
   renderOnderdelen();
@@ -2270,7 +2270,7 @@ function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
 function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
 
 // Orders met deze (ERP-)statussen blijven gewoon zichtbaar in de werkplaats,
-// maar mogen niet meer geclaimd worden — bewust anders dan status 480 (wacht
+// maar mogen niet meer geclaimd worden — bewust anders dan status 455 (wacht
 // op onderdelen), die juist helemaal uit de open-lijst verdwijnt. Voor een
 // nog niet geclaimde regel volgt r.status de actuele opdrachtstatus (zie de
 // sync-fix in backend/sync.js), dus dit dekt zowel net-binnengekomen als
@@ -6363,7 +6363,7 @@ function renderOnderdelen() {
 
   const groepen = {};
   state.reparaties
-    .filter(r => r.status === '480' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && (x.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(x)))
+    .filter(r => r.status === '455' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && (x.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(x)))
     .forEach(r => {
       if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
       groepen[r.opdrachtnr].push(r);
@@ -6400,21 +6400,21 @@ async function zetWachtOpOnderdelen() {
   closeModal('modal-detail');
   closeModal('modal-start');
   if (state.demoMode) {
-    r.status = '480';
+    r.status = '455';
     renderLists();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
     return;
   }
   try {
-    await updateReparatieStatus(r.id, { status: '480' });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '480' });
+    await updateReparatieStatus(r.id, { status: '455' });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '455' });
     await laadReparaties();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
   } catch(e) { toast('Fout: ' + e.message); }
 }
 
 async function zetVoorraadBeschikbaar(opdrachtnr) {
-  const regels = state.reparaties.filter(r => r.opdrachtnr === opdrachtnr && r.status === '480');
+  const regels = state.reparaties.filter(r => r.opdrachtnr === opdrachtnr && r.status === '455');
   if (!regels.length) return;
   if (state.demoMode) {
     regels.forEach(r => { r.status = '445'; r.monteur_id = null; r.monteurs = null; });

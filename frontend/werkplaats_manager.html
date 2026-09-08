@@ -2188,7 +2188,7 @@ async function renderManagerOnderdelen() {
   const lijst = document.getElementById('mgr-ond-lijst');
   if (lijst) {
     const groepen = {};
-    alleReparaties.filter(r => r.status === '480').forEach(r => {
+    alleReparaties.filter(r => r.status === '455').forEach(r => {
       if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
       groepen[r.opdrachtnr].push(r);
     });
@@ -2957,7 +2957,7 @@ function maakOpenGeclaimdKaartHTML(regels, nr, statusType, monteurMap, repLookup
     const st    = String(r.status);
     const afg   = isRegelAfgerond(r);
     const claim = st === statusInBehandeling(r);
-    const ond   = st === '480';
+    const ond   = st === '455';
 
     const rowStyle = afg   ? 'cursor:default;border-left:2px solid var(--ok);opacity:.6'
                    : claim ? 'cursor:default;border-left:2px solid var(--accent)'
@@ -3060,7 +3060,7 @@ async function renderOpdrachten() {
   Object.entries(perOpdracht).forEach(([nr, regels]) => {
     const alleAfgerond = regels.every(isRegelAfgerond);
     const heeftClaim   = regels.some(r => String(r.status) === statusInBehandeling(r));
-    const heeftOnd     = regels.some(r => String(r.status) === '480');
+    const heeftOnd     = regels.some(r => String(r.status) === '455');
     if (alleAfgerond) return; // valt in afgerond-sectie via log-query
     if (heeftClaim)       geclaimdGroepen.push({ nr, regels });
     else if (heeftOnd)    onderdelenGroepen.push({ nr, regels });
