@@ -4398,11 +4398,8 @@ async function bevestigVragenlijst() {
     const meta = vraagIndex[el.dataset.vraag] || {};
     return {
       reparatie_id:    r.id,
-      opdrachtnr:      r.opdrachtnr  || null,
-      artikelcode:     r.artikelcode || null,
-      betalercode:     r.betalercode || null,
       vragenlijst_id:  meta.vragenset_id || null,
-      vraagnr:         meta.volgorde ?? null,
+      vraag_id:        el.dataset.vraag,
       antwoord:        stripEmoji(optieIndex[el.dataset.optie] || el.dataset.optie),
       _vid:            el.dataset.vraag,
     };
@@ -4414,11 +4411,8 @@ async function bevestigVragenlijst() {
     const meta = vraagIndex[ta.dataset.vraag] || {};
     antwoorden.push({
       reparatie_id:    r.id,
-      opdrachtnr:      r.opdrachtnr  || null,
-      artikelcode:     r.artikelcode || null,
-      betalercode:     r.betalercode || null,
       vragenlijst_id:  meta.vragenset_id || null,
-      vraagnr:         meta.volgorde ?? null,
+      vraag_id:        ta.dataset.vraag,
       antwoord:        ta.value.trim() || null,
       _vid:            ta.dataset.vraag,
     });
@@ -4431,11 +4425,8 @@ async function bevestigVragenlijst() {
     const gekozenOptie = sel.options[sel.selectedIndex];
     antwoorden.push({
       reparatie_id:    r.id,
-      opdrachtnr:      r.opdrachtnr  || null,
-      artikelcode:     r.artikelcode || null,
-      betalercode:     r.betalercode || null,
       vragenlijst_id:  meta.vragenset_id || null,
-      vraagnr:         meta.volgorde ?? null,
+      vraag_id:        sel.dataset.vraag,
       antwoord:        sel.value ? stripEmoji(gekozenOptie?.dataset?.tekst || sel.value) : null,
       _vid:            sel.dataset.vraag,
     });
