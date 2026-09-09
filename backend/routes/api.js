@@ -52,7 +52,7 @@ const TABEL_KANAAL = {
 // /api/monteurs?select=*` de bcrypt-hash van iedereen teruggeven. auth.js
 // strip 'm al expliciet bij het inloggen zelf — dit dekt de generieke route.
 const VERBODEN_KOLOMMEN = {
-  monteurs: ['wachtwoord_hash'],
+  monteurs: ['wachtwoord_hash', 'nfc_token_hash'],
 };
 
 function stripVerbodenKolommen(tabel, rows) {

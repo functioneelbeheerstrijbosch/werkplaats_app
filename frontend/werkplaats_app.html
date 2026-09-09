@@ -36,6 +36,7 @@
       <input type="password" class="login-input" id="login-ww"    placeholder="Wachtwoord"
         autocomplete="current-password" onkeydown="if(event.key==='Enter') signIn()">
       <button class="login-btn" id="login-btn" onclick="signIn()">Inloggen</button>
+      <button class="login-btn" id="login-nfc-btn" onclick="signInMetNfc()" style="display:none;background:var(--bg3);color:var(--text);border:1px solid var(--border)">📶 Inloggen met NFC-tag</button>
       <div id="login-fout" class="login-fout"></div>
     </div>
   </div>

@@ -228,6 +228,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('header-datum').textContent =
     new Date().toLocaleDateString('nl-NL', { weekday:'long', day:'numeric', month:'long' });
 
+  initNfcLogin();
+
   // Bestaande sessie controleren
   const { data: { session } } = await sb.auth.getSession();
   if (session) await verwerkSessie(session.user);
@@ -252,6 +254,76 @@ async function signIn() {
 
   if (error) { fout.textContent = 'Onjuist e-mailadres of wachtwoord'; return; }
   await verwerkSessie(data.user);
+}
+
+// NFC-login werkt alleen via de Web NFC API — op dit moment alleen
+// ondersteund door Chrome op Android (geen iOS/Safari, geen desktop), en
+// alleen in een secure context (https, of localhost tijdens ontwikkelen).
+// De knop blijft daarom standaard verborgen en verschijnt alleen als de
+// browser het daadwerkelijk kan.
+function initNfcLogin() {
+  const btn = document.getElementById('login-nfc-btn');
+  if (btn && 'NDEFReader' in window) btn.style.display = '';
+}
+
+async function signInMetNfc() {
+  const fout = document.getElementById('login-fout');
+  const btn  = document.getElementById('login-nfc-btn');
+  fout.textContent = '';
+
+  if (!('NDEFReader' in window)) {
+    fout.textContent = 'NFC wordt niet ondersteund op dit toestel/deze browser';
+    return;
+  }
+
+  btn.textContent = 'Houd de tag tegen je toestel…';
+  btn.disabled    = true;
+
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+
+    // Wacht op de eerste tag-lezing (of een fout, bv. als scannen niet mag
+    // starten) — reader.scan() zelf resolvet zodra het scannen begonnen is,
+    // niet zodra er een tag gelezen is.
+    const event = await new Promise((resolve, reject) => {
+      reader.onreading = (e) => resolve(e);
+      reader.onreadingerror = () => reject(new Error('Kon de tag niet lezen'));
+    });
+
+    // Token = het fabrieks-serienummer (UID) van de tag zelf — geen kale
+    // tag hoeft dus vooraf beschreven te worden. `event.serialNumber` komt
+    // van Chrome/Android als hex-bytes met dubbele punt (bv. "04:40:0a:..."),
+    // altijd lowercase genormaliseerd hier zodat dit exact overeenkomt met
+    // hoe de hash in MySQL is aangemaakt (zie internal-docs/architectuur-
+    // en-audit.md) — anders matcht SHA2() nooit, ongeacht hoe de browser
+    // het toevallig zelf formatteert.
+    let token = (event.serialNumber || '').toLowerCase();
+
+    // Fallback voor het (zeldzame) geval dat het platform geen serienummer
+    // teruggeeft: een los geschreven tekstrecord op de tag, zoals in de
+    // oorspronkelijke opzet.
+    if (!token) {
+      const eersteRecord = event.message.records[0];
+      if (eersteRecord) {
+        const tekstDecoder = new TextDecoder(eersteRecord.encoding || 'utf-8');
+        token = tekstDecoder.decode(eersteRecord.data).trim();
+      }
+    }
+    if (!token) throw new Error('Kon geen serienummer/token van deze tag lezen');
+
+    const { data, error } = await sb.auth.signInWithNfc({ token });
+    if (error) throw new Error(error.message || 'Tag niet herkend');
+    await verwerkSessie(data.user);
+
+  } catch (e) {
+    fout.textContent = e.name === 'NotAllowedError'
+      ? 'Geen toestemming voor NFC — sta het toe en probeer opnieuw'
+      : 'Fout: ' + e.message;
+  } finally {
+    btn.textContent = '📶 Inloggen met NFC-tag';
+    btn.disabled    = false;
+  }
 }
 
 async function verwerkSessie(user) {
