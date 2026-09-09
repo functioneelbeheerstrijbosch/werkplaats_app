@@ -45,7 +45,8 @@ router.patch('/reparaties/:id', async (req, res) => {
 router.get('/monteurs', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM monteurs WHERE actief = 1 ORDER BY naam');
-    res.json(rows);
+    // wachtwoord_hash nooit meesturen — zelfde reden als bij POST /auth/login.
+    res.json(rows.map(({ wachtwoord_hash, ...r }) => r));
   } catch (err) {
     console.error('[planning GET /monteurs]', err.message);
     res.status(500).json({ error: 'Serverfout' });
