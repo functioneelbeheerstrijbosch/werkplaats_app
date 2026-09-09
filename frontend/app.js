@@ -223,6 +223,27 @@ function getDemoMonteurs() {
   ];
 }
 
+// sb.auth.getSession() leest alleen de gecachete monteur uit localStorage
+// (weggeschreven bij de laatste keer inloggen, zie api.js) — rolwijzigingen
+// die een beheerder daarna in functiebeheer doet (bv. locatie_aanpassen
+// aanzetten) komen dus niet door totdat de monteur expliciet uit-/inlogt.
+// Ververs daarom bij het herstellen van een bestaande sessie het
+// monteur-record vanaf de server, en zet de gecachete kopie ook meteen
+// bij zodat andere plekken die localStorage lezen (sb.auth.getUser()) ook
+// de verse rechten zien. Lukt de verversing niet (offline, servers plat)
+// dan gaan we gewoon door met de gecachete versie — niet blokkerend.
+async function ververGebruiker(gecachet) {
+  if (!gecachet?.id) return gecachet;
+  try {
+    const { data, error } = await sb.from('monteurs').select('*').eq('id', gecachet.id).single();
+    if (error || !data) return gecachet;
+    localStorage.setItem('wplaats_monteur', JSON.stringify(data));
+    return data;
+  } catch {
+    return gecachet;
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('header-datum').textContent =
@@ -230,7 +251,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Bestaande sessie controleren
   const { data: { session } } = await sb.auth.getSession();
-  if (session) await verwerkSessie(session.user);
+  if (session) await verwerkSessie(await ververGebruiker(session.user));
 });
 
 
