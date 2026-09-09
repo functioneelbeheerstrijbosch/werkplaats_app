@@ -45,6 +45,28 @@ const TABEL_KANAAL = {
   reparatie_logs: 'werkplaats-sync',
 };
 
+// Kolommen die nooit naar de client mogen, ongeacht wat er in `select`
+// gevraagd wordt (ook niet via '*') — de generieke router is verder alleen
+// door authMiddleware afgeschermd (elke ingelogde monteur mag elke rij uit
+// TOEGESTANE_TABELLEN opvragen), dus zonder deze blocklist zou `GET
+// /api/monteurs?select=*` de bcrypt-hash van iedereen teruggeven. auth.js
+// strip 'm al expliciet bij het inloggen zelf — dit dekt de generieke route.
+const VERBODEN_KOLOMMEN = {
+  monteurs: ['wachtwoord_hash'],
+};
+
+function stripVerbodenKolommen(tabel, rows) {
+  const verboden = VERBODEN_KOLOMMEN[tabel];
+  if (!verboden || rows == null) return rows;
+  const stripRij = (r) => {
+    if (!r || typeof r !== 'object') return r;
+    const kopie = { ...r };
+    verboden.forEach(k => delete kopie[k]);
+    return kopie;
+  };
+  return Array.isArray(rows) ? rows.map(stripRij) : stripRij(rows);
+}
+
 // ── Multer voor bestandsuploads ─────────────────────────────────────────────
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -272,6 +294,8 @@ router.get('/:tabel', async (req, res) => {
       });
     }
 
+    data = stripVerbodenKolommen(tabel, data);
+
     if (single === '1') {
       if (data.length === 0) return res.status(406).json({ data: null, error: 'Niet gevonden' });
       return res.json({ data: data[0], error: null });
@@ -322,7 +346,7 @@ router.post('/:tabel', async (req, res) => {
     const kanaal = TABEL_KANAAL[tabel];
     if (kanaal) broadcast(kanaal, { event: 'INSERT', table: tabel, new: results[0] });
 
-    const data = results.length === 1 ? results[0] : results;
+    const data = stripVerbodenKolommen(tabel, results.length === 1 ? results[0] : results);
     res.status(201).json({ data, error: null });
 
   } catch (err) {
