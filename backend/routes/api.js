@@ -67,6 +67,49 @@ function stripVerbodenKolommen(tabel, rows) {
   return Array.isArray(rows) ? rows.map(stripRij) : stripRij(rows);
 }
 
+// ── F-CRIT-01 (audit 2026-09-09): kolommen die nooit via de generieke laag
+// geschreven mogen worden ────────────────────────────────────────────────
+// Zonder deze blocklist kon elke ingelogde monteur (alleen authMiddleware,
+// geen rolcheck op deze laag) via `PATCH /api/monteurs?eq_id=<zichzelf>`
+// met body `{ is_admin: 1 }` zichzelf beheerder maken, of via
+// `PATCH /api/monteurs?eq_id=<willekeurige id>` met body
+// `{ wachtwoord_hash: '<eigen hash>' }` / `{ nfc_token_hash: '...' }` het
+// account van elke andere gebruiker overnemen zonder ooit een wachtwoord
+// nodig te hebben. Rol- en authenticatievelden horen alleen bereikbaar te
+// zijn via routes met een expliciete rolcheck + audit-log:
+// `routes/planning.js` (`PATCH /monteurs/:id`, vereist werkplaats_planning)
+// en `routes/auth.js` (`POST /wachtwoord-instellen`, vereist is_admin).
+// Getest (2026-09-09): vóór deze fix gaf bovenstaande PATCH een 200 en
+// werd is_admin/wachtwoord_hash daadwerkelijk overschreven; ná deze fix
+// geeft dezelfde aanroep een 403 zonder dat er iets in de database
+// gewijzigd wordt. Zie internal-docs/onafhankelijke-security-audit-2026-09-09.md
+// (F-CRIT-01) voor de volledige analyse.
+const BESCHERMDE_SCHRIJFKOLOMMEN = {
+  monteurs: [
+    'wachtwoord_hash', 'nfc_token_hash',
+    'is_admin', 'werkplaats_planning', 'is_onderdelenbeheerder',
+    'werkplaats_toegang', 'witgoed_toegang', 'witgoed_voorraadbeheer',
+    'locatie_aanpassen', 'werkvoorbereider', 'productieplanning',
+  ],
+};
+
+// Geeft de beschermde kolomnamen terug die in `obj` voorkomen (leeg = geen
+// probleem). `rijen` mag één object of een array van objecten zijn (POST
+// ondersteunt beide).
+function vindBeschermdeSchrijfkolommen(tabel, rijen) {
+  const beschermd = BESCHERMDE_SCHRIJFKOLOMMEN[tabel];
+  if (!beschermd || !beschermd.length) return [];
+  const lijst = Array.isArray(rijen) ? rijen : [rijen];
+  const gevonden = new Set();
+  for (const rij of lijst) {
+    if (!rij || typeof rij !== 'object') continue;
+    for (const k of Object.keys(rij)) {
+      if (beschermd.includes(k)) gevonden.add(k);
+    }
+  }
+  return [...gevonden];
+}
+
 // ── Multer voor bestandsuploads ─────────────────────────────────────────────
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -152,6 +195,31 @@ function buildWhere(params, tabelPrefix) {
     where: conditions.length ? 'WHERE ' + conditions.join(' AND ') : '',
     values,
   };
+}
+
+// ── F-CRIT-02 (audit 2026-09-09): striktere WHERE-opbouw voor destructieve
+// operaties (PATCH/DELETE) ───────────────────────────────────────────────
+// `buildWhere()` hierboven accepteert ook `neq_`/`gte_`/`lte_`/`ilike_`/
+// `is_`/`not_null_`-filters — prima voor lezen (GET), maar voor UPDATE/
+// DELETE opent dat een triviale bypass van de "er moet een filter zijn"-eis:
+// `DELETE /api/reparaties?neq_id=0` bouwt `WHERE id != '0'`, wat vrijwel
+// altijd *elke* rij in de tabel matcht (een autoincrement-id is nooit 0).
+// Zo kon elke ingelogde monteur met één aanroep een complete tabel leeg-
+// vegen (inclusief `monteurs` → alle accounts weg).
+// Alle daadwerkelijke PATCH/DELETE-aanroepen vanuit de frontend gebruiken
+// uitsluitend `.eq(...)`/`.in(...)` (geverifieerd: geen enkele `.neq/.gte/
+// .lte/.ilike/.is` op een `.update()`/`.delete()`-keten in `frontend/`) —
+// deze beperking breekt dus geen bestaande functionaliteit.
+// Getest (2026-09-09): vóór deze fix verwijderde/overschreef
+// `?neq_id=0` de volledige tabel; ná deze fix geeft dezelfde aanroep een
+// 400 ("Alleen eq_/in_-filters toegestaan...") en blijft de tabel intact.
+function buildWhereBeperkt(params) {
+  const toegestaneVoorvoegsels = ['eq_', 'in_'];
+  const onherkendeSleutel = Object.keys(params).find(
+    key => !toegestaneVoorvoegsels.some(v => key.startsWith(v))
+  );
+  if (onherkendeSleutel) return { fout: `Filter '${onherkendeSleutel}' niet toegestaan bij wijzigen/verwijderen — alleen eq_/in_.` };
+  return { ...buildWhere(params), fout: null };
 }
 
 // Parseert een select-string als 'kol1, kol2, tabel(kolA, kolB)' in platte
@@ -319,6 +387,15 @@ router.post('/:tabel', async (req, res) => {
   const metSelect    = !!req.query.select;
   const results      = [];
 
+  // F-CRIT-01: rol-/authenticatievelden nooit via deze generieke route
+  // laten schrijven — check vóór er ook maar één query uitgevoerd wordt,
+  // zodat een batch nooit gedeeltelijk (de toegestane rijen wel, de
+  // beschermde kolom genegeerd) doorgaat.
+  const beschermd = vindBeschermdeSchrijfkolommen(tabel, rijen);
+  if (beschermd.length) {
+    return res.status(403).json({ data: null, error: `Kolom(men) niet toegestaan via deze route: ${beschermd.join(', ')}` });
+  }
+
   try {
     for (const rij of rijen) {
       if (!rij || Object.keys(rij).length === 0) continue;
@@ -362,7 +439,13 @@ router.patch('/:tabel', async (req, res) => {
     return res.status(400).json({ data: null, error: 'Onbekende tabel' });
   }
 
-  const { where, values: whereValues } = buildWhere(filterParams(req.query));
+  // F-CRIT-02: alleen eq_/in_-filters toegestaan bij UPDATE — voorkomt de
+  // triviale bypass van de "er moet een filter zijn"-eis hieronder (bv.
+  // `?neq_id=0`, dat vrijwel de hele tabel matcht in plaats van niets).
+  const { where, values: whereValues, fout: filterFout } = buildWhereBeperkt(filterParams(req.query));
+  if (filterFout) {
+    return res.status(400).json({ data: null, error: filterFout });
+  }
   if (!where) {
     return res.status(400).json({ data: null, error: 'Geen filter meegegeven bij UPDATE (veiligheid)' });
   }
@@ -370,6 +453,13 @@ router.patch('/:tabel', async (req, res) => {
   const body = req.body;
   if (!body || Object.keys(body).length === 0) {
     return res.status(400).json({ data: null, error: 'Geen data meegegeven' });
+  }
+
+  // F-CRIT-01: rol-/authenticatievelden nooit via deze generieke route
+  // laten schrijven (zie POST-handler hierboven voor de volledige uitleg).
+  const beschermd = vindBeschermdeSchrijfkolommen(tabel, body);
+  if (beschermd.length) {
+    return res.status(403).json({ data: null, error: `Kolom(men) niet toegestaan via deze route: ${beschermd.join(', ')}` });
   }
 
   const setCols   = Object.keys(body).map(c => `\`${c}\` = ?`).join(', ');
@@ -396,7 +486,12 @@ router.delete('/:tabel', async (req, res) => {
     return res.status(400).json({ data: null, error: 'Onbekende tabel' });
   }
 
-  const { where, values } = buildWhere(filterParams(req.query));
+  // F-CRIT-02: alleen eq_/in_-filters toegestaan bij DELETE — zelfde reden
+  // als bij PATCH hierboven.
+  const { where, values, fout: filterFout } = buildWhereBeperkt(filterParams(req.query));
+  if (filterFout) {
+    return res.status(400).json({ data: null, error: filterFout });
+  }
   if (!where) {
     return res.status(400).json({ data: null, error: 'Geen filter meegegeven bij DELETE (veiligheid)' });
   }
@@ -423,6 +518,13 @@ router.post('/:tabel/upsert', async (req, res) => {
   }
 
   const rijen = Array.isArray(req.body) ? req.body : [req.body];
+
+  // F-CRIT-01: zelfde reden als bij POST/PATCH hierboven — upsert schrijft
+  // net zo goed arbitraire kolommen.
+  const beschermd = vindBeschermdeSchrijfkolommen(tabel, rijen);
+  if (beschermd.length) {
+    return res.status(403).json({ data: null, error: `Kolom(men) niet toegestaan via deze route: ${beschermd.join(', ')}` });
+  }
 
   try {
     for (const rij of rijen) {
