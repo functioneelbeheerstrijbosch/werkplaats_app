@@ -102,8 +102,11 @@ app.use(express.json({ limit: '10mb' }));
 // Uploads opslaan, bug-screenshots, reparatie-geluiden
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Publieke routes — login heeft strenge rate limit
+// Publieke routes — login heeft strenge rate limit (ook nfc-login: zelfde
+// soort brute-force-oppervlak als het wachtwoordveld, alleen op een token
+// i.p.v. een wachtwoord)
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/nfc-login', loginLimiter);
 app.use('/api/auth', authRoutes);
 
 // Import: ontvang data van browser en sla op in reparaties

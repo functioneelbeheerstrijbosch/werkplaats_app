@@ -223,31 +223,38 @@ class ApiClient {
   constructor(baseUrl) {
     this._base = baseUrl;
 
+    // Gedeelde afhandeling voor elke inlogroute (wachtwoord, NFC, ...) —
+    // stuurt `body` naar `pad`, en zet bij succes token + monteur weg.
+    const _login = async (pad, body) => {
+      try {
+        const res  = await fetch(`${this._base}${pad}`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        const json = await res.json();
+
+        if (json.token) {
+          _setToken(json.token);
+          // MySQL geeft integer-ids terug; net als bij .from()-resultaten
+          // normaliseren naar strings zodat === overal klopt (bv.
+          // r.monteur_id === state.monteur.id in app.js).
+          const monteur = _normaliseerIds(json.monteur);
+          localStorage.setItem('wplaats_monteur', JSON.stringify(monteur));
+          return { data: { user: monteur }, error: null };
+        }
+        return { data: null, error: { message: json.error } };
+      } catch (err) {
+        return { data: null, error: { message: err.message } };
+      }
+    };
+
     this.auth = {
       // Inloggen: POST /api/auth/login
-      signInWithPassword: async ({ email, password }) => {
-        try {
-          const res  = await fetch(`${this._base}/auth/login`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ email, password }),
-          });
-          const json = await res.json();
+      signInWithPassword: ({ email, password }) => _login('/auth/login', { email, password }),
 
-          if (json.token) {
-            _setToken(json.token);
-            // MySQL geeft integer-ids terug; net als bij .from()-resultaten
-            // normaliseren naar strings zodat === overal klopt (bv.
-            // r.monteur_id === state.monteur.id in app.js).
-            const monteur = _normaliseerIds(json.monteur);
-            localStorage.setItem('wplaats_monteur', JSON.stringify(monteur));
-            return { data: { user: monteur }, error: null };
-          }
-          return { data: null, error: { message: json.error } };
-        } catch (err) {
-          return { data: null, error: { message: err.message } };
-        }
-      },
+      // Inloggen met een NFC-tag: POST /api/auth/nfc-login
+      signInWithNfc: ({ token }) => _login('/auth/nfc-login', { token }),
 
       // Sessie controleren (vanuit localStorage)
       getSession: () => {
