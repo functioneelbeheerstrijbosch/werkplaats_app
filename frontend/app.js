@@ -4380,15 +4380,15 @@ function controleerUren(el) {
   if (w) w.style.display = hoog ? 'block' : 'none';
 }
 
+// Altijd precies één antwoord per vraag — ook bij 'gegroepeerde_checkbox',
+// die voorheen los toggelde en zo tegenstrijdige antwoorden (bv. zowel
+// Ja als Nee) tegelijk toeliet. Selecteren van een optie wist dus altijd
+// eerst de rest van dezelfde vraag.
 function selecteerOptie(el) {
   const vraagId = el.dataset.vraag;
-  if (el.dataset.type === 'gegroepeerde_checkbox') {
-    el.classList.toggle('selected');
-  } else {
-    document.querySelectorAll(`[data-vraag="${vraagId}"]`)
-      .forEach(e => e.classList.remove('selected'));
-    el.classList.add('selected');
-  }
+  document.querySelectorAll(`[data-vraag="${vraagId}"]`)
+    .forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
 }
 
 async function bevestigVragenlijst() {
