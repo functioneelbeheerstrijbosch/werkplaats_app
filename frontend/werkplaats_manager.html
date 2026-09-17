@@ -778,6 +778,26 @@
   .fb-toggle:disabled { opacity: .45; cursor: not-allowed; }
   .fb-laden { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 
+  /* ── VEELGEBRUIKTE LOCATIES (snelkeuze-balk in de monteur-app) ── */
+  .vl-sectie { margin-top: 28px; }
+  .vl-titel { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .vl-toevoegen { display: flex; gap: 8px; margin-bottom: 12px; max-width: 360px; }
+  .vl-input {
+    flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 10px;
+  }
+  .vl-input:focus { outline: none; border-color: var(--accent); }
+  .vl-lijst { display: flex; flex-direction: column; gap: 6px; max-width: 360px; }
+  .vl-rij {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 8px 12px; font-size: 13px;
+  }
+  .vl-verwijder {
+    background: none; border: none; color: var(--danger); cursor: pointer;
+    font-size: 13px; padding: 2px 6px; line-height: 1;
+  }
+
   /* ── TOAST ── */
   #toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -973,6 +993,17 @@
     <div class="fb-scroll">
       <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Functies per monteur</div>
       <div id="fb-inhoud" class="fb-laden">Laden…</div>
+
+      <!-- Veelgebruikte locaties: snelkeuze-balk in de Locatie-module van de monteur-app -->
+      <div class="vl-sectie">
+        <div class="vl-titel">Veelgebruikte locaties (snelkeuze in Locatie-module)</div>
+        <div class="vl-toevoegen">
+          <input type="text" class="vl-input" id="vl-nieuwe-locatie" placeholder="Nieuwe locatie…"
+            onkeydown="if(event.key==='Enter')vlToevoegen()" autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="header-tab" style="cursor:pointer" onclick="vlToevoegen()">Toevoegen</button>
+        </div>
+        <div class="vl-lijst" id="vl-lijst">Laden…</div>
+      </div>
     </div>
   </div>
 
@@ -2053,7 +2084,7 @@ function toonTab(naam) {
   if (naam === 'onderdelen') renderManagerOnderdelen();
   if (naam === 'dashboard')  renderDashboard();
   if (naam === 'tagnr')      renderTagnrTab();
-  if (naam === 'functies')   laadFunctiebeheer();
+  if (naam === 'functies')   { laadFunctiebeheer(); vlLaad(); }
 }
 
 // ── FUNCTIEBEHEER ─────────────────────────────────────────────────
@@ -2120,6 +2151,63 @@ async function fbToggle(monteurId, kolom, btn) {
     toast('Fout: ' + e.message);
   }
   btn.disabled = false;
+}
+
+// ── VEELGEBRUIKTE LOCATIES ────────────────────────────────────────
+// Beheer van de snelkeuze-balk in de Locatie-module van de monteur-app
+// (tabel veelgebruikte_locaties, via de generieke sb.from()-laag — geen
+// planning-specifieke route nodig, zelfde patroon als onderdelen_kleuren).
+
+async function vlLaad() {
+  const lijst = document.getElementById('vl-lijst');
+  if (!lijst) return;
+  lijst.textContent = 'Laden…';
+  try {
+    const { data, error } = await sb.from('veelgebruikte_locaties').select('*').order('volgorde', { ascending: true });
+    if (error) throw error;
+    vlRender(data || []);
+  } catch (e) {
+    lijst.innerHTML = `<span style="color:var(--danger)">Fout: ${esc(e.message)}</span>`;
+  }
+}
+
+function vlRender(rijen) {
+  const lijst = document.getElementById('vl-lijst');
+  if (!lijst) return;
+  lijst.innerHTML = rijen.length
+    ? rijen.map(r => `
+      <div class="vl-rij">
+        <span>${esc(r.locatie)}</span>
+        <button class="vl-verwijder" onclick="vlVerwijder('${String(r.id).replace(/'/g,"\\'")}')" title="Verwijderen">🗑</button>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px">Nog geen locaties toegevoegd</div>';
+}
+
+async function vlToevoegen() {
+  const input = document.getElementById('vl-nieuwe-locatie');
+  const locatie = input.value.trim().toUpperCase();
+  if (!locatie) return;
+  input.disabled = true;
+  try {
+    const { error } = await sb.from('veelgebruikte_locaties').insert({ locatie });
+    if (error) throw error;
+    input.value = '';
+    await vlLaad();
+  } catch (e) {
+    toast('Fout: ' + e.message);
+  }
+  input.disabled = false;
+  input.focus();
+}
+
+async function vlVerwijder(id) {
+  try {
+    const { error } = await sb.from('veelgebruikte_locaties').delete().eq('id', id);
+    if (error) throw error;
+    await vlLaad();
+  } catch (e) {
+    toast('Fout: ' + e.message);
+  }
 }
 
 // ── TAGNR TAB ─────────────────────────────────────────────────────
