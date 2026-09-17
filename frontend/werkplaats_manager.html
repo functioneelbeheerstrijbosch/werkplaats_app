@@ -778,6 +778,26 @@
   .fb-toggle:disabled { opacity: .45; cursor: not-allowed; }
   .fb-laden { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 
+  /* ── VEELGEBRUIKTE LOCATIES (snelkeuze-balk in de monteur-app) ── */
+  .vl-sectie { margin-top: 28px; }
+  .vl-titel { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .vl-toevoegen { display: flex; gap: 8px; margin-bottom: 12px; max-width: 360px; }
+  .vl-input {
+    flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 10px;
+  }
+  .vl-input:focus { outline: none; border-color: var(--accent); }
+  .vl-lijst { display: flex; flex-direction: column; gap: 6px; max-width: 360px; }
+  .vl-rij {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 8px 12px; font-size: 13px;
+  }
+  .vl-verwijder {
+    background: none; border: none; color: var(--danger); cursor: pointer;
+    font-size: 13px; padding: 2px 6px; line-height: 1;
+  }
+
   /* ── TOAST ── */
   #toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -973,6 +993,17 @@
     <div class="fb-scroll">
       <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Functies per monteur</div>
       <div id="fb-inhoud" class="fb-laden">Laden…</div>
+
+      <!-- Veelgebruikte locaties: snelkeuze-balk in de Locatie-module van de monteur-app -->
+      <div class="vl-sectie">
+        <div class="vl-titel">Veelgebruikte locaties (snelkeuze in Locatie-module)</div>
+        <div class="vl-toevoegen">
+          <input type="text" class="vl-input" id="vl-nieuwe-locatie" placeholder="Nieuwe locatie…"
+            onkeydown="if(event.key==='Enter')vlToevoegen()" autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="header-tab" style="cursor:pointer" onclick="vlToevoegen()">Toevoegen</button>
+        </div>
+        <div class="vl-lijst" id="vl-lijst">Laden…</div>
+      </div>
     </div>
   </div>
 
@@ -1042,14 +1073,19 @@ async function planningFetch(pad, opties = {}) {
 }
 
 // REP-opdrachten (behalve REPKR/REPPR) lopen als reparatie door de
-// statussen 445→465→519, overige opdrachtcodes (leveringen) als
-// 500→470→519 — zelfde onderscheid en functienamen als frontend/app.js.
+// statussen 445→503→505, overige opdrachtcodes (leveringen) als
+// 500→501→505 — zelfde onderscheid en functienamen als frontend/app.js.
+// 505 = regel afgerond (altijd, ook als daarmee de hele order compleet is —
+// zie statusAfgerond() in app.js). 519 komt alleen nog voor in oudere,
+// vóór die wijziging afgeronde regels; de manager-tool rondt zelf geen
+// regels af, dus heeft geen eigen kopie nodig. isRegelAfgerond() hieronder
+// herkent beide via afgerond_op.
 function isRepCode(r) {
   const code = (r?.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR');
 }
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
-function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
 
 let alleReparaties  = [];
 let alleMonteurs    = [];
@@ -1305,8 +1341,9 @@ function resetDashFilter() {
 // Een regel is afgerond als status=519 OF als afgerond_op gevuld is.
 // Dit voorkomt dat externe syncs (Google Cloud) die status terugzetten naar 445
 // afgeronde opdrachten opnieuw laten verschijnen. De afgerond_op-fallback vangt
-// ook status 370 (afgekeurd bij afronden, zie afrondReparatie() in app.js) —
-// daarom hier gebruiken i.p.v. rechtstreeks op '519' te vergelijken.
+// ook status 370 (afgekeurd) en 505 (regel klaar, order nog niet compleet —
+// zie statusAfgerond() in frontend/app.js) — daarom hier gebruiken i.p.v.
+// rechtstreeks op '519' te vergelijken.
 function isRegelAfgerond(r) {
   return String(r.status) === '519' || !!r.afgerond_op;
 }
@@ -2047,7 +2084,7 @@ function toonTab(naam) {
   if (naam === 'onderdelen') renderManagerOnderdelen();
   if (naam === 'dashboard')  renderDashboard();
   if (naam === 'tagnr')      renderTagnrTab();
-  if (naam === 'functies')   laadFunctiebeheer();
+  if (naam === 'functies')   { laadFunctiebeheer(); vlLaad(); }
 }
 
 // ── FUNCTIEBEHEER ─────────────────────────────────────────────────
@@ -2116,6 +2153,63 @@ async function fbToggle(monteurId, kolom, btn) {
   btn.disabled = false;
 }
 
+// ── VEELGEBRUIKTE LOCATIES ────────────────────────────────────────
+// Beheer van de snelkeuze-balk in de Locatie-module van de monteur-app
+// (tabel veelgebruikte_locaties, via de generieke sb.from()-laag — geen
+// planning-specifieke route nodig, zelfde patroon als onderdelen_kleuren).
+
+async function vlLaad() {
+  const lijst = document.getElementById('vl-lijst');
+  if (!lijst) return;
+  lijst.textContent = 'Laden…';
+  try {
+    const { data, error } = await sb.from('veelgebruikte_locaties').select('*').order('volgorde', { ascending: true });
+    if (error) throw error;
+    vlRender(data || []);
+  } catch (e) {
+    lijst.innerHTML = `<span style="color:var(--danger)">Fout: ${esc(e.message)}</span>`;
+  }
+}
+
+function vlRender(rijen) {
+  const lijst = document.getElementById('vl-lijst');
+  if (!lijst) return;
+  lijst.innerHTML = rijen.length
+    ? rijen.map(r => `
+      <div class="vl-rij">
+        <span>${esc(r.locatie)}</span>
+        <button class="vl-verwijder" onclick="vlVerwijder('${String(r.id).replace(/'/g,"\\'")}')" title="Verwijderen">🗑</button>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px">Nog geen locaties toegevoegd</div>';
+}
+
+async function vlToevoegen() {
+  const input = document.getElementById('vl-nieuwe-locatie');
+  const locatie = input.value.trim().toUpperCase();
+  if (!locatie) return;
+  input.disabled = true;
+  try {
+    const { error } = await sb.from('veelgebruikte_locaties').insert({ locatie });
+    if (error) throw error;
+    input.value = '';
+    await vlLaad();
+  } catch (e) {
+    toast('Fout: ' + e.message);
+  }
+  input.disabled = false;
+  input.focus();
+}
+
+async function vlVerwijder(id) {
+  try {
+    const { error } = await sb.from('veelgebruikte_locaties').delete().eq('id', id);
+    if (error) throw error;
+    await vlLaad();
+  } catch (e) {
+    toast('Fout: ' + e.message);
+  }
+}
+
 // ── TAGNR TAB ─────────────────────────────────────────────────────
 
 function renderTagnrTab() {
@@ -2182,7 +2276,7 @@ async function renderManagerOnderdelen() {
   const lijst = document.getElementById('mgr-ond-lijst');
   if (lijst) {
     const groepen = {};
-    alleReparaties.filter(r => r.status === '480').forEach(r => {
+    alleReparaties.filter(r => r.status === '455').forEach(r => {
       if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
       groepen[r.opdrachtnr].push(r);
     });
@@ -2951,7 +3045,7 @@ function maakOpenGeclaimdKaartHTML(regels, nr, statusType, monteurMap, repLookup
     const st    = String(r.status);
     const afg   = isRegelAfgerond(r);
     const claim = st === statusInBehandeling(r);
-    const ond   = st === '480';
+    const ond   = st === '455';
 
     const rowStyle = afg   ? 'cursor:default;border-left:2px solid var(--ok);opacity:.6'
                    : claim ? 'cursor:default;border-left:2px solid var(--accent)'
@@ -3054,7 +3148,7 @@ async function renderOpdrachten() {
   Object.entries(perOpdracht).forEach(([nr, regels]) => {
     const alleAfgerond = regels.every(isRegelAfgerond);
     const heeftClaim   = regels.some(r => String(r.status) === statusInBehandeling(r));
-    const heeftOnd     = regels.some(r => String(r.status) === '480');
+    const heeftOnd     = regels.some(r => String(r.status) === '455');
     if (alleAfgerond) return; // valt in afgerond-sectie via log-query
     if (heeftClaim)       geclaimdGroepen.push({ nr, regels });
     else if (heeftOnd)    onderdelenGroepen.push({ nr, regels });

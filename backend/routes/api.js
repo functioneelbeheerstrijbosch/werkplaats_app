@@ -4,6 +4,7 @@ const multer   = require('multer');
 const path     = require('path');
 const fs       = require('fs');
 const { broadcast } = require('./realtime');
+const { pushNaarAmf } = require('../sync');
 
 // ── Tabellen die via de generieke router mogen worden benaderd ──────────────
 // Voeg hier GEEN tabellen toe die je niet wil blootstellen via de API.
@@ -27,6 +28,7 @@ const TOEGESTANE_TABELLEN = new Set([
   'bug_meldingen',
   'postcodes',
   'STNRs',
+  'veelgebruikte_locaties',
 ]);
 
 // ── Beperkte set toegestane 'embeds' (Supabase-achtige geneste select,
@@ -426,9 +428,22 @@ router.post('/:tabel', async (req, res) => {
     const data = stripVerbodenKolommen(tabel, results.length === 1 ? results[0] : results);
     res.status(201).json({ data, error: null });
 
+    // Event-gestuurde AMF-push: ná het antwoord (blokkeert de monteur-app
+    // niet), alleen bij reparatie_logs. pushNaarAmf() filtert zelf al op
+    // relevante actie-types en de voortgangsmarkering, dus onschuldig om
+    // 'm hier ongeacht het actie-type aan te roepen. Nog uitgeschakeld
+    // totdat AMF_PUSH_URL bewust gezet wordt (zie sync.js) — tot die tijd
+    // is dit een no-op.
+    if (tabel === 'reparatie_logs') {
+      pushNaarAmf().catch(err => console.error('[PUSH] Onverwachte fout:', err.message));
+    }
+
   } catch (err) {
     console.error(`[POST /${tabel}]`, err.message);
-    res.status(500).json({ data: null, error: 'Serverfout' });
+    // Tijdelijk (t.b.v. debuggen op de testomgeving) de echte DB-foutmelding
+    // meesturen i.p.v. alleen 'Serverfout' — zo is 'ie ook zonder toegang
+    // tot de servertermninal terug te zien in de Network-tab van de browser.
+    res.status(500).json({ data: null, error: 'Serverfout', detail: err.message });
   }
 });
 

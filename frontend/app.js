@@ -18,6 +18,7 @@ const state = {
   onderdelenKleuren: {}, // opdrachtnr → 'oranje'|'rood'|'groen'
   witgoedApparaten: [],  // actieve witgoed claims
   prepApparaten:    [],  // voorraad panel (actief + afgerond vandaag)
+  veelgebruikteLocaties: [], // snelkeuze-balk in de Locatie-module (tabel veelgebruikte_locaties)
 };
 
 // ── SUPABASE HELPERS ──────────────────────────────────────────
@@ -163,7 +164,7 @@ async function updateReparatieStatus(id, data) {
 }
 
 // LET OP bij `opdrachtstatus`/`nieuwe_opdrachtstatus` op insertLog()-aanroepen:
-// `reparaties` heeft twee statusvelden. `status` (445/465/470/480/500/519/370)
+// `reparaties` heeft twee statusvelden. `status` (445/465/470/455/500/519/370)
 // is onze eigen claim/afrond-workflow — wordt hier meteen bijgewerkt, geen
 // sync nodig. `opdrachtstatus` is het losse ERP-veld, alleen ververst door de
 // periodieke MSSQL-sync (elke ~20 min in productie) — dus altijd achter de
@@ -172,8 +173,13 @@ async function updateReparatieStatus(id, data) {
 // status), niet bij `r.opdrachtstatus` — anders loopt de logging tot wel 20
 // minuten achter op wat er in de app al gebeurd is.
 async function insertLog(data) {
-  const { data: row, error } = await sb.from('reparatie_logs').insert(data).select().single();
-  if (error) throw error;
+  const { data: row, error, detail } = await sb.from('reparatie_logs').insert(data).select().single();
+  // `error` is hier een kale string (bv. 'Serverfout'), geen Error-object —
+  // .message erop is dus altijd undefined bij een 'throw error'. `detail`
+  // (tijdelijk toegevoegd in backend/routes/api.js t.b.v. debuggen) bevat de
+  // echte DB-foutmelding; wikkel in een echte Error zodat catch(e){...e.message}
+  // verderop in de app ook daadwerkelijk iets zinnigs laat zien.
+  if (error) throw new Error(detail || error);
   return row;
 }
 
@@ -199,28 +205,25 @@ function setupRealtime() {
     .subscribe();
 }
 
-// ── DEMO DATA ─────────────────────────────────────────────────
-function getDemoReparaties() {
-  const now = Date.now();
-  return [
-    { id: 'r1', opdrachtnr: '300001', klant_naam: 'Bakkerij De Korst', klant_nummer: 'K-1042', artikelomschrijving: 'Vaatwasser', merk: 'Miele', model: 'G7310', serienummer: 'MG-7310-0041', klacht: 'Wast niet meer af, pomp draait maar water blijft staan.', prioriteit: 'hoog', status: '445', monteur_id: null, monteurs: null, aangemaakt_op: new Date(now - 2*86400000).toISOString() },
-    { id: 'r2', opdrachtnr: '300002', klant_naam: 'Fam. Jansen', klant_nummer: 'K-0821', artikelomschrijving: 'Wasmachine', merk: 'Bosch', model: 'Series 6 WAU28P', serienummer: 'BS-WAU-0042', klacht: 'Draait niet meer op centrifuge, trilt extreem.', prioriteit: 'normaal', status: '445', monteur_id: null, monteurs: null, aangemaakt_op: new Date(now - 86400000).toISOString() },
-    { id: 'r3', opdrachtnr: '300003', klant_naam: 'Hotel De Waal', klant_nummer: 'K-2201', artikelomschrijving: 'Droger', merk: 'Siemens', model: 'WT47XKH0', serienummer: 'SI-WT47-0043', klacht: 'Droogt slecht, duurt veel te lang.', prioriteit: 'spoed', status: '445', monteur_id: null, monteurs: null, aangemaakt_op: new Date(now - 4*3600000).toISOString() },
-    { id: 'r4', opdrachtnr: '300004', klant_naam: 'Fam. El Hajj', klant_nummer: 'K-0554', artikelomschrijving: 'Koelkast', merk: 'Samsung', model: 'RF65A977', serienummer: 'SA-RF65-0044', klacht: 'Vriezer vriest niet meer, koelkast nog wel.', prioriteit: 'hoog', status: '445', monteur_id: null, monteurs: null, aangemaakt_op: new Date(now - 3*86400000).toISOString() },
-    { id: 'r5', opdrachtnr: '300005', klant_naam: 'Huisartsenpraktijk Veldhuis', klant_nummer: 'K-3301', artikelomschrijving: 'Magnetron', merk: 'Whirlpool', model: 'W7MW461', serienummer: 'WP-W7MW-0045', klacht: 'Draait helemaal niet meer aan.', prioriteit: 'normaal', status: '445', monteur_id: null, monteurs: null, aangemaakt_op: new Date(now - 86400000).toISOString() },
-    { id: 'r6', opdrachtnr: '299998', klant_naam: 'Fam. Peters', klant_nummer: 'K-0711', artikelomschrijving: 'Wasmachine', merk: 'LG', model: 'F4WV508S0', serienummer: 'LG-F4WV-0038', klacht: 'Lekt water via de deur.', prioriteit: 'normaal', status: '465', monteur_id: 'm1', monteurs: { naam: 'Jan de Vries', initialen: 'JV' }, aangemaakt_op: new Date(now - 3*86400000).toISOString(), in_behandeling_op: new Date(now - 2*3600000).toISOString() },
-    { id: 'r7', opdrachtnr: '299995', klant_naam: 'Fam. Hoekstra', klant_nummer: 'K-0229', artikelomschrijving: 'Droger', merk: 'Miele', model: 'TCE630WP', serienummer: 'MI-TCE630-0035', klacht: 'Filterlamp knippert, droger stopt halverwege.', prioriteit: 'normaal', status: '519', monteur_id: 'm2', monteurs: { naam: 'Marco Hendriks', initialen: 'MH' }, aangemaakt_op: new Date(now - 7*86400000).toISOString(), afgerond_op: new Date(now - 5*86400000).toISOString() },
-    { id: 'r8', opdrachtnr: '299990', klant_naam: 'Fam. Bakker', klant_nummer: 'K-0555', artikelomschrijving: 'Koelkast', merk: 'Samsung', model: 'RS68A8820S9', serienummer: 'SA-RS68-0077', artikelcode: 'DA97-13718B', klacht: 'Koelt niet meer goed, verdamper bevroren.', prioriteit: 'hoog', status: '480', doorsluizenjn: 'J', opdrachtcode: 'REP', monteur_id: 'm1', monteurs: { naam: 'Jan de Vries', initialen: 'JV' }, aangemaakt_op: new Date(now - 2*86400000).toISOString() },
-  ];
-}
-
-function getDemoMonteurs() {
-  return [
-    { id: 'm1', naam: 'Jan de Vries',   initialen: 'JV', is_onderdelenbeheerder: true },
-    { id: 'm2', naam: 'Marco Hendriks', initialen: 'MH' },
-    { id: 'm3', naam: 'Monteur 3', initialen: 'M3' },
-    { id: 'm4', naam: 'Monteur 4', initialen: 'M4' },
-  ];
+// sb.auth.getSession() leest alleen de gecachete monteur uit localStorage
+// (weggeschreven bij de laatste keer inloggen, zie api.js) — rolwijzigingen
+// die een beheerder daarna in functiebeheer doet (bv. locatie_aanpassen
+// aanzetten) komen dus niet door totdat de monteur expliciet uit-/inlogt.
+// Ververs daarom bij het herstellen van een bestaande sessie het
+// monteur-record vanaf de server, en zet de gecachete kopie ook meteen
+// bij zodat andere plekken die localStorage lezen (sb.auth.getUser()) ook
+// de verse rechten zien. Lukt de verversing niet (offline, servers plat)
+// dan gaan we gewoon door met de gecachete versie — niet blokkerend.
+async function ververGebruiker(gecachet) {
+  if (!gecachet?.id) return gecachet;
+  try {
+    const { data, error } = await sb.from('monteurs').select('*').eq('id', gecachet.id).single();
+    if (error || !data) return gecachet;
+    localStorage.setItem('wplaats_monteur', JSON.stringify(data));
+    return data;
+  } catch {
+    return gecachet;
+  }
 }
 
 // ── INIT ──────────────────────────────────────────────────────
@@ -232,7 +235,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Bestaande sessie controleren
   const { data: { session } } = await sb.auth.getSession();
-  if (session) await verwerkSessie(session.user);
+  if (session) await verwerkSessie(await ververGebruiker(session.user));
 });
 
 
@@ -572,7 +575,7 @@ function renderLists() {
   // Behandeling: eigen regels individueel tonen
   const behandeling = state.reparaties.filter(r =>
     !isRegelAfgerond(r) && r.monteur_id === mijnId &&
-    r.status !== '480' &&
+    r.status !== '455' &&
     (r.status === statusInBehandeling(r) || (r.doorsluizenjn || '').toUpperCase() === 'J')
   );
 
@@ -593,9 +596,14 @@ function renderLists() {
       .filter(r => {
         if (isRegelAfgerond(r))  return false;
         if (isInstructieRegel(r)) return false;
-        if (r.status === '480') return false; // Wacht op onderdelen — niet claimbaar
+        if (r.status === '455') return false; // Wacht op onderdelen — niet claimbaar
         if (r.monteur_id && r.monteur_id !== mijnId) return false; // geclaimd door iemand anders
-        // Standaard claimbaar via status (445/450 = open reparatie, 500 = open levering)
+        // Deze lijst bepaalt alleen welke ORDERS in het tabblad Werkplaats
+        // verschijnen — niet of een individuele regel geclaimd mag worden.
+        // Bewust ruim: een order met bv. status 487 moet gewoon zichtbaar
+        // blijven (alleen de Claim-knop zelf wordt grijs/niet-klikbaar via
+        // magClaimen(), zie renderLijst() modus 'open'). Daarom hier geen
+        // statusbeperking — elke openstaande, niet-afgeronde J-regel telt.
         if ((r.status === statusOpen(r) || r.status === '450') && (r.doorsluizenjn || '').toUpperCase() === 'J') return true;
         // J-regels zonder artikelcode zijn ook claimbaar ongeacht de ERP-status,
         // zolang ze vrij zijn (geen monteur) en niet afgerond.
@@ -781,7 +789,7 @@ function renderLists() {
   document.getElementById('count-afgerond').textContent    = afgerondLogs.length;
 
   // Onderdelen count + render
-  const onderdelenNrs = new Set(state.reparaties.filter(r => r.status === '480').map(r => r.opdrachtnr));
+  const onderdelenNrs = new Set(state.reparaties.filter(r => r.status === '455').map(r => r.opdrachtnr));
   const telOndEl = document.getElementById('count-onderdelen');
   if (telOndEl) telOndEl.textContent = onderdelenNrs.size;
   renderOnderdelen();
@@ -933,6 +941,8 @@ function renderLists() {
     prepLaadApparaten();
     prepRenderOrders();
   }
+
+  renderLocOpdrachten();
 }
 
 function afgerondKaartHTML(logs, regels) {
@@ -994,6 +1004,10 @@ function toewijzingsBorderstijl(r) {
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// Feature-toggle: "+ Regel toevoegen" (openRegelModal) tijdelijk uit op
+// verzoek — op true zetten om 'm weer aan te zetten.
+const REGEL_TOEVOEGEN_AAN = false;
 
 function groepCardHTML(regels, mijnId, modus, logs) {
   // modus = 'open' | 'behandeling'
@@ -1110,6 +1124,8 @@ function groepCardHTML(regels, mijnId, modus, logs) {
           <span style="font-size:11px;color:var(--muted)">${esc(monteurNaam)}</span>
           <button class="claim-btn" onclick="event.stopPropagation();vrijgeefRegel('${r.id}')" style="background:none;color:var(--danger);border:1px solid var(--danger)">Vrijgeven</button>
         </div>`;
+      } else if (!magClaimen(r)) {
+        actieHTML = `<span style="font-size:11px;color:var(--muted)" title="Status ${esc(r.status)} — niet claimbaar">Niet claimbaar</span>`;
       } else {
         actieHTML = `<button class="claim-btn" onclick="claimRegel('${r.id}',event)">Claimen</button>`;
       }
@@ -1127,7 +1143,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
       : '';
 
     const toonCheckbox = !forceerInzien && !isAfgerond && (
-      (modus === 'open'  && !r.monteur_id) ||
+      (modus === 'open'  && !r.monteur_id && magClaimen(r)) ||
       (modus === 'behandeling' && r.monteur_id === mijnId)
     );
     const checkboxHTML = toonCheckbox
@@ -1169,8 +1185,8 @@ function groepCardHTML(regels, mijnId, modus, logs) {
 
   const regelsHTML = werkRegelsHTML + onderdeelSectieHTML;
 
-  // "Alles claimen" — alleen vrije J-regels
-  const vrijeClaim = werkRegels.filter(r => !r.monteur_id);
+  // "Alles claimen" — alleen vrije, claimbare J-regels
+  const vrijeClaim = werkRegels.filter(r => !r.monteur_id && magClaimen(r));
   const allesClaimen = modus === 'open' && vrijeClaim.length >= 1 && geclaimd === 0
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border)">
         <button class="claim-btn" style="width:100%" onclick="claimAlles(${JSON.stringify(vrijeClaim.map(r => r.id)).replace(/"/g,'&quot;')},event)">
@@ -1316,7 +1332,7 @@ function groepCardHTML(regels, mijnId, modus, logs) {
         ${allesClaimen}
         ${allesAfronden}
         ${voorraadFooter}
-        ${(modus !== 'afgerond' && modus !== 'onderdelen') ? `
+        ${(REGEL_TOEVOEGEN_AAN && modus !== 'afgerond' && modus !== 'onderdelen') ? `
         <div style="padding:6px 14px 10px;border-top:1px solid var(--border)">
           <button onclick="event.stopPropagation();openRegelModal('${hoofd.opdrachtnr}')"
             style="width:100%;background:none;border:1px dashed var(--border);border-radius:var(--r);
@@ -1754,7 +1770,7 @@ async function bevestigClaimAlles() {
   for (const opdr of betrokkenOpdrachten) {
     const alleJ = state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r));
     if (alleJ.every(r => r.monteur_id || ids.includes(r.id))) {
-      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !r.monteur_id)
+      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !r.monteur_id && magClaimen(r))
         .forEach(r => extraNIds.push(r.id));
     }
   }
@@ -1763,6 +1779,7 @@ async function bevestigClaimAlles() {
   for (const id of alleTeClaimenIds) {
     const r = state.reparaties.find(x => x.id === id);
     if (!r) continue;
+    if (!magClaimen(r)) { toast('Regel ' + (r.regelnummer ?? r.id) + ' overgeslagen — niet meer claimbaar (status ' + r.status + ')'); continue; }
     const nieuweStatus = statusInBehandeling(r);
     if (state.demoMode) {
       r.status = nieuweStatus;
@@ -1912,6 +1929,71 @@ let _afrondTagnrs    = []; // tagnummers bewerkt in afrond-modal
 let _afrondHeropend  = false; // true als modal via potlood-knop is geopend
 let _afrondAantal    = 0;  // maximaal aantal tagnummers (= r.aantal)
 
+// Reparatietijd (som van de per-tag tijd van gerepareerde GM-apparaten,
+// zie _tagnrGescandMeta) voor de regel die nu in modal-afrond openstaat —
+// vast, niet aan te passen in het formulier. Cruciaal om deze nooit door
+// elkaar te laten lopen met de tijd voor de opdracht in het algemeen: het
+// 'Bestede tijd'-veld in modal-afrond wordt in dat geval 'Overige tijd',
+// en telt samen met deze reparatietijd op tot de totale opdrachttijd.
+let _maReparatietijdMin = 0;
+
+function _berekenReparatietijdMinuten(regelId) {
+  const meta = _tagnrGescandMeta.get(`${regelId}::gm_gerepareerd`) || [];
+  return meta.reduce((som, m) => som + (parseInt(m?.uren) || 0) * 60 + (parseInt(m?.minuten) || 0), 0);
+}
+
+// Alle tagnummers die voor deze regel zijn ingevoerd/gescand tijdens het
+// afronden — ongeacht of het een gewone (niet-opgesplitste) regel is of een
+// HUUR/RUIL-regel met gm_voorraad/gm_gerepareerd/nw-scanstromen. Gebruikt
+// voor het tagnummer-veld van de hoofd-'afgerond'-logregel, die anders het
+// (voor HUUR/RUIL vaak lege/verouderde) r.tagnummer uit de ERP-sync zou
+// gebruiken i.p.v. wat de monteur daadwerkelijk heeft ingevoerd.
+function _alleTagnrsVoorRegelUitQueue(regelId) {
+  const directe = _tagnrGescand.get(regelId);
+  if (directe !== undefined) return directe;
+  const alles = [];
+  for (const stream of ['gm_voorraad', 'gm_gerepareerd', 'nw']) {
+    alles.push(...(_tagnrGescand.get(`${regelId}::${stream}`) || []));
+  }
+  return alles;
+}
+
+// Zelfde, maar dan voor de single-regel modal-afrond-flow: daar is
+// _afrondTagnrs (de bewerkbare tagnummer-lijst in modal-afrond zelf) de
+// meest actuele bron — die kan tussentijds door de monteur zijn aangepast,
+// terwijl _tagnrGescand pas ná deze insertLog-call wordt bijgewerkt. NIET
+// bruikbaar in bulk-afronden (daar is _afrondTagnrs niet regel-specifiek).
+function _alleTagnrsVoorRegel(regelId) {
+  if (_afrondTagnrs.length) return _afrondTagnrs;
+  return _alleTagnrsVoorRegelUitQueue(regelId);
+}
+
+// Het tagnummer-veld op reparatie_logs was oorspronkelijk bedoeld voor één
+// (ERP-)tagnummer. Bij een HUUR/RUIL-regel met meerdere gescande tags kan
+// de kommagescheiden lijst de kolomlengte overschrijden en een 500-fout op
+// de INSERT veroorzaken — liever hier afkappen dan de hele afronding laten
+// mislukken (de volledige lijst per tag staat sowieso al in tagnr_scans).
+function _tagnummerVeldWaarde(tags, fallback) {
+  const joined = (tags || []).join(', ');
+  if (!joined) return fallback ?? null;
+  const MAX = 250;
+  return joined.length > MAX ? joined.slice(0, MAX - 1) + '…' : joined;
+}
+
+function _formatTijdKort(min) {
+  return min >= 60 ? `${Math.floor(min / 60)}u ${String(min % 60).padStart(2, '0')}m` : `${min}m`;
+}
+
+// Herberekent 'Totale tijd voor deze opdracht' = reparatietijd (vast) +
+// het handmatig ingevulde 'Overige tijd'-veld hierboven.
+function herberekenMaTotaalTijd() {
+  const uren    = parseInt(document.getElementById('ma-uren').value) || 0;
+  const minuten = parseInt(document.getElementById('ma-minuten').value) || 0;
+  const totaalMin = _maReparatietijdMin + uren * 60 + minuten;
+  const el = document.getElementById('ma-totaaltijd-waarde');
+  if (el) el.textContent = _formatTijdKort(totaalMin);
+}
+
 // Eerst vragen tonen (als die er zijn), daarna pas afrond
 // ── WERKZAAMHEDEN CHECKLIST ────────────────────────────────────
 let _werkCheckCallback = null;
@@ -2051,6 +2133,27 @@ async function _openAfrondDirect(id, heropend = false) {
     document.getElementById('ma-minuten').value = '';
   }
 
+  // Reparatietijd (som van de per-tag tijd van gerepareerde GM-apparaten)
+  // apart tonen — vast, niet aan te passen — zodat die nooit door elkaar
+  // loopt met de tijd voor de opdracht in het algemeen. Alleen relevant
+  // (en zichtbaar) als deze regel gerepareerde GM-tags heeft; anders blijft
+  // het gewoon het simpele 'Bestede tijd'-veld van vroeger.
+  _maReparatietijdMin = _berekenReparatietijdMinuten(r.id);
+  const repRij    = document.getElementById('ma-reparatietijd-rij');
+  const totaalRij = document.getElementById('ma-totaaltijd-rij');
+  const tijdLabel = document.getElementById('ma-tijd-label');
+  if (_maReparatietijdMin > 0) {
+    document.getElementById('ma-reparatietijd-waarde').value = _maReparatietijdMin;
+    repRij.style.display = '';
+    totaalRij.style.display = '';
+    if (tijdLabel) tijdLabel.textContent = 'Overige tijd';
+  } else {
+    repRij.style.display = 'none';
+    totaalRij.style.display = 'none';
+    if (tijdLabel) tijdLabel.textContent = 'Bestede tijd';
+  }
+  herberekenMaTotaalTijd();
+
   // Heropend via potlood: herstel eerder opgeslagen diagnose, werkzaamheden en notitie
   if (heropend && !state.demoMode) {
     try {
@@ -2089,6 +2192,7 @@ async function _openAfrondDirect(id, heropend = false) {
         }
       }
     } catch { /* stil falen */ }
+    herberekenMaTotaalTijd();
   }
 
   afrondOnderdelen = [];
@@ -2221,6 +2325,7 @@ window.wplaatsSessieVerlopen = function() {
 async function startReparatie() {
   const r = state.activeMod;
   if (!r) return;
+  if (!magClaimen(r)) { closeModal('modal-start'); toast('Deze regel is niet meer claimbaar (status ' + r.status + ')'); renderLists(); return; }
   closeModal('modal-start');
   const mijnId = state.monteur.id;
   const opdrachtnr = r.opdrachtnr;
@@ -2234,7 +2339,7 @@ async function startReparatie() {
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     if (alleJ.every(r2 => r2.monteur_id)) {
-      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id)
+      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2))
         .forEach(n => { n.status = statusInBehandeling(n); n.monteur_id = mijnId; n.monteurs = { naam: state.monteur.naam, initialen: state.monteur.initialen }; n.in_behandeling_op = now; });
     }
     renderLists();
@@ -2257,7 +2362,7 @@ async function startReparatie() {
     const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
     if (alleJGeclaimd) {
-      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id);
+      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2));
       for (const n of nRegels) {
         await updateReparatieStatus(n.id, { status: statusInBehandeling(n), monteur_id: mijnId, toegewezen_door: 'monteur', in_behandeling_op: now });
       }
@@ -2327,11 +2432,35 @@ function isHuurRuilCode(r) {
 }
 
 // Statusverloop verschilt per soort regel, bepaald via dezelfde isRepCode()
-// als hierboven: reparaties lopen 445 (open) → 465 (in behandeling) → 519
-// (afgerond), leveringen 500 (open) → 470 (in behandeling) → 519. Afronden
-// komt voor beide op 519 uit, dus daar is geen aparte functie voor nodig.
+// als hierboven: reparaties lopen 445 (open) → 503 (in behandeling),
+// leveringen 500 (open) → 501 (in behandeling). Witgoed (bevestigAfrondWitgoed
+// e.d.) blijft bewust buiten dit onderscheid — ongewijzigd.
 function statusOpen(r)          { return isRepCode(r) ? '445' : '500'; }
-function statusInBehandeling(r) { return isRepCode(r) ? '465' : '470'; }
+function statusInBehandeling(r) { return isRepCode(r) ? '503' : '501'; }
+
+// Statussen die een (nog niet geclaimde) regel als 'open'/claimbaar tellen
+// in het tabblad Werkplaats — hetzelfde vaste setje voor alle
+// opdrachtsoorten, ongeacht REP/levering. Elke andere status (bv. 487/490,
+// 455) blijft de regel gewoon zichtbaar elders in de app, maar mag niet
+// meer geclaimd worden: de knop wordt dan een niet-klikbaar "Niet
+// claimbaar"-label (zie renderLijst(), modus 'open') i.p.v. de Claimen-knop.
+// Voor een nog niet geclaimde regel volgt r.status de actuele
+// opdrachtstatus (zie de sync-fix in backend/sync.js), dus dit dekt zowel
+// net-binnengekomen als langer openstaande regels.
+const CLAIMBARE_OPEN_STATUSSEN = new Set(['445', '435', '500']);
+function magClaimen(r) { return CLAIMBARE_OPEN_STATUSSEN.has(String(r.status)); }
+
+// Eindstatus bij afronden: altijd 505, ook als dit de laatste nog
+// openstaande J-regel van de opdracht was (dus nooit meer automatisch naar
+// 519 — dat was eerder wel zo, maar is op verzoek teruggedraaid). Geldt voor
+// reparatie én levering gelijk — alleen 'afgekeurd' (370, bij afronden van
+// een REP-regel) valt hierbuiten, zie afrondReparatie(). meeAfgerondeIds
+// wordt niet meer gebruikt voor de status zelf, maar blijft in de
+// signatuur staan zodat bestaande aanroepen (bulk-afronden e.d.)
+// ongewijzigd kunnen blijven.
+function statusAfgerond(r, meeAfgerondeIds = [r.id]) {
+  return '505';
+}
 
 function isRepUitkomstRegel(r) {
   const code = (r.opdrachtcode || '').toUpperCase();
@@ -2383,13 +2512,13 @@ async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
   if (!nRegels.length) return;
 
   if (state.demoMode) {
-    nRegels.forEach(n => { n.status = '519'; n.afgerond_op = now; });
+    nRegels.forEach(n => { n.status = '505'; n.afgerond_op = now; });
     return;
   }
 
   for (const n of nRegels) {
     try {
-      await updateReparatieStatus(n.id, { status: '519', afgerond_op: now });
+      await updateReparatieStatus(n.id, { status: '505', afgerond_op: now });
       await insertLog({
         reparatie_id: n.id,
         monteur_id: state.monteur.id,
@@ -2405,7 +2534,7 @@ async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
         tagnummer: n.tagnummer,
         notitie: 'Automatisch afgerond — alle regels van de opdracht zijn klaar',
         opdrachtstatus: n.status || null,
-        nieuwe_opdrachtstatus: '519',
+        nieuwe_opdrachtstatus: '505',
       });
     } catch (e) {
       toast('Fout bij automatisch afronden onderdeel: ' + e.message);
@@ -2426,7 +2555,10 @@ async function afrondReparatie(uitkomst) {
   const uren       = parseInt(document.getElementById('ma-uren').value) || 0;
   const minuten    = parseInt(document.getElementById('ma-minuten').value) || 0;
   if (uren >= 10 && !confirm(`Let op: je probeert ${uren} uur in te vullen. Klopt dit?`)) return;
-  const totalMin   = uren * 60 + minuten;
+  // Totale opdrachttijd = vaste reparatietijd (som van gerepareerde GM-
+  // apparaten) + het hier ingevulde 'overige'/bestede-tijd-veld — bewust
+  // nooit door elkaar gehaald, zie _maReparatietijdMin hierboven.
+  const totalMin   = _maReparatietijdMin + uren * 60 + minuten;
 
   const vragenAfrondItems = [
     ...(vragenNotities.get(r.id) || []),
@@ -2445,10 +2577,11 @@ async function afrondReparatie(uitkomst) {
 
   closeModal('modal-afrond');
   const now = new Date().toISOString();
-  // Afgekeurd apparaat krijgt een eigen eindstatus (370) i.p.v. de normale
-  // afrond-status 519 — alleen bereikbaar via de uitkomst-vraag hierboven
-  // (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
-  const eindStatus = uitkomst === 'afgekeurd' ? '370' : '519';
+  // Afgekeurd apparaat krijgt een eigen eindstatus (370), ongeacht of de
+  // order daarmee compleet is — alleen bereikbaar via de uitkomst-vraag
+  // hierboven (dus alleen bij REP-J-regels, zie isRepUitkomstRegel()).
+  // Anders: altijd 505, zie statusAfgerond().
+  const eindStatus = uitkomst === 'afgekeurd' ? '370' : statusAfgerond(r);
 
   if (state.demoMode) {
     r.status = eindStatus;
@@ -2476,7 +2609,7 @@ async function afrondReparatie(uitkomst) {
       aantal: r.aantal,
       artikelomschrijving: r.artikelomschrijving,
       serienummer: r.serienummer,
-      tagnummer: r.tagnummer,
+      tagnummer: _tagnummerVeldWaarde(_alleTagnrsVoorRegel(r.id), r.tagnummer),
       notitie: notitieMetUitkomst || null,
       // Los van 'notitie' (die blijft samengeperst t.b.v. weergave in de
       // app) — schone, aparte velden voor data-doeleinden (rapportage/
@@ -2485,10 +2618,12 @@ async function afrondReparatie(uitkomst) {
       werkzaamheden: notitie || null,
       uitkomst: uitkomst || null,
       opdrachtstatus: r.status || null,       // status vóór afronden
-      nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (519, of 370 bij afgekeurd)
+      nieuwe_opdrachtstatus: eindStatus,      // status ná afronden (505, of 370 bij afgekeurd)
       magazijnlocatie: r.magazijnlocatie || null,
       uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
       gebruikte_onderdelen: onderdelen || null,
+      magazijn_gm_aantal: _tagnrMagazijn.get(r.id)?.gmAantal ?? null,
+      magazijn_nw_aantal: _tagnrMagazijn.get(r.id)?.nwAantal ?? null,
       bestede_tijd_minuten: totalMin || null,
       taal: _taalVoorkeur,
     });
@@ -2719,10 +2854,14 @@ async function bevestigBulkAfrond() {
 
   if (state.demoMode) {
     const now = new Date().toISOString();
-    const demoOpdrachtnr = state.reparaties.find(x => x.id === bulkAfrondIds[0])?.opdrachtnr;
+    const eersteRDemo   = state.reparaties.find(x => x.id === bulkAfrondIds[0]);
+    const demoOpdrachtnr  = eersteRDemo?.opdrachtnr;
+    // Vóór het muteren berekend — statusAfgerond() kijkt naar de huidige
+    // (nog ongewijzigde) state van de overige regels van de opdracht.
+    const demoEindStatus = eersteRDemo ? statusAfgerond(eersteRDemo, bulkAfrondIds) : '505';
     bulkAfrondIds.forEach(id => {
       const r = state.reparaties.find(x => x.id === id);
-      if (r) { r.status = '519'; r.afgerond_op = now; }
+      if (r) { r.status = demoEindStatus; r.afgerond_op = now; }
     });
     if (demoOpdrachtnr) await voltooiNRegelsIndienCompleet(demoOpdrachtnr, now);
     renderLists(); switchTab('afgerond');
@@ -2734,12 +2873,19 @@ async function bevestigBulkAfrond() {
   startVragenQueue(bulkAfrondIds, async () => {
     const now = new Date().toISOString();
     const gezienOpdrachtnrsBulk = new Set();
-    let bulkOpdrachtnr = null;
+    let bulkOpdrachtnr  = null;
+    let bulkEindStatus  = null;
     try {
       for (const id of bulkAfrondIds) {
         const r = state.reparaties.find(x => x.id === id);
         if (!r) continue;
-        if (!bulkOpdrachtnr) bulkOpdrachtnr = r.opdrachtnr;
+        if (!bulkOpdrachtnr) {
+          bulkOpdrachtnr = r.opdrachtnr;
+          // Vóór laadReparaties() berekend — statusAfgerond() kijkt naar de
+          // huidige state van de overige regels van de opdracht, en de hele
+          // batch telt hierbij als 'al klaar' (zie meeAfgerondeIds).
+          bulkEindStatus = statusAfgerond(r, bulkAfrondIds);
+        }
         const vragenItems = [...(vragenNotities.get(id) || [])];
         if (!gezienOpdrachtnrsBulk.has(r.opdrachtnr)) {
           gezienOpdrachtnrsBulk.add(r.opdrachtnr);
@@ -2753,7 +2899,7 @@ async function bevestigBulkAfrond() {
           vragenItems.length ? vragenItems.join('\n')       : '',
         ].filter(Boolean).join('\n\n');
 
-        await updateReparatieStatus(id, { status: '519', afgerond_op: now });
+        await updateReparatieStatus(id, { status: bulkEindStatus, afgerond_op: now });
         const logRij = await insertLog({
           reparatie_id: id,
           monteur_id:   state.monteur.id,
@@ -2766,16 +2912,18 @@ async function bevestigBulkAfrond() {
           aantal:       r.aantal,
           artikelomschrijving: r.artikelomschrijving,
           serienummer:  r.serienummer,
-          tagnummer:    r.tagnummer,
+          tagnummer:    _tagnummerVeldWaarde(_alleTagnrsVoorRegelUitQueue(id), r.tagnummer),
           notitie:      notitieGecombineerd || null,
           // Zie afrondReparatie() hierboven — zelfde principe, losse
           // velden naast de samengeperste 'notitie'.
           diagnose:     rDiagnose || null,
           werkzaamheden: rNotitie || null,
           opdrachtstatus: r.status || null,       // status vóór afronden
-          nieuwe_opdrachtstatus: '519',           // status ná afronden
+          nieuwe_opdrachtstatus: bulkEindStatus,  // status ná afronden (505)
           magazijnlocatie: r.magazijnlocatie || null,
           uiterste_datum_afdeling: r.uiterste_datum_afdeling || null,
+          magazijn_gm_aantal: _tagnrMagazijn.get(id)?.gmAantal ?? null,
+          magazijn_nw_aantal: _tagnrMagazijn.get(id)?.nwAantal ?? null,
           bestede_tijd_minuten: tijdPerRegel[id] || null,
         });
         await _insertTagnrScans(logRij?.id, id, r.opdrachtnr, r.regelnummer, r.artikelcode, state.monteur.id, now);
@@ -3543,7 +3691,10 @@ async function startVoorraadReparatie() {
       aantal:            aantal,
       klacht:            'Wordt vastgelegd na reparatie',
       prioriteit:        vrdPrio,
-      status:            '465',
+      // Altijd 'in behandeling reparatie' — voorraadregels hebben geen
+      // opdrachtcode, dus statusInBehandeling() (die op isRepCode() steunt)
+      // zou hier ten onrechte de leverings-status teruggeven.
+      status:            '503',
       monteur_id:        state.monteur.id,
       in_behandeling_op: new Date().toISOString(),
       tagnrscannenjn:    tagnrJn ? 'J' : null,
@@ -3576,6 +3727,9 @@ async function startVoorraadReparatie() {
       _tagnrQueue    = [{ id: rep.id, label: [code, app].filter(Boolean).join(' · '), aantal: Math.max(aantal, 1) }];
       _tagnrQueueIdx = 0;
       _tagnrGescand  = new Map();
+      _tagnrMagazijn = new Map();
+      _tagnrVoorraadGerepareerd = new Map();
+      _tagnrGescandMeta = new Map();
       _tagnrOnDone   = doAfsluiten;
       _openTagnrScherm();
     } else {
@@ -3950,6 +4104,21 @@ let _tagnrQueueIdx = 0;
 let _tagnrGescand  = new Map(); // reparatieId → string[]
 let _tagnrOnDone   = null;
 
+// ── MAGAZIJN-VRAAG (GM/NW herkomst, alleen bij HUUR/RUIL) ───────
+// reparatieId → { gm: boolean, nw: boolean, gmAantal: number|null, nwAantal: number|null }
+let _tagnrMagazijn = new Map();
+
+// Verdeling van het GM-aantal over voorraad/gerepareerd, direct na de
+// magazijn-vraag gevraagd (alleen als gmAantal > 0). Standaard staat alles
+// op voorraad (gerepareerdAantal begint op 0).
+// reparatieId → { voorraadAantal: number, gerepareerdAantal: number }
+let _tagnrVoorraadGerepareerd = new Map();
+
+// Per gescand GM-gerepareerd-tagnummer: diagnose/werkzaamheden/tijd/onderdelen.
+// stream-key (bv. "12::gm_gerepareerd") → array, index-gelijk aan
+// _tagnrGescand voor diezelfde key: { diagnose, werkzaamheden, uren, minuten, onderdelen }
+let _tagnrGescandMeta = new Map();
+
 // Tagnummer(s) verplicht als tagnrscannenjn='J' staat, óf (ongeacht die vlag)
 // bij opdrachtcode HUUR/RUIL voor J-regels met een aantal groter dan 0.
 function vereistTagnummer(r) {
@@ -3973,7 +4142,198 @@ function startTagnrScanQueue(ids, onDone) {
   });
   _tagnrQueueIdx = 0;
   _tagnrGescand  = new Map();
+  _tagnrMagazijn = new Map(); // voorkomt lekken van oude GM/NW-antwoorden
+  _tagnrVoorraadGerepareerd = new Map(); // voorkomt lekken van oude voorraad/gerepareerd-verdeling
+  _tagnrGescandMeta = new Map(); // voorkomt lekken van oude reparatie-notities
   _tagnrOnDone   = onDone;
+  _openTagnrScherm();
+}
+
+// Zelfde opzet als de voorraad/gerepareerd-vraag: twee altijd zichtbare
+// -/aantal/+ velden die samen moeten optellen tot item.aantal. Anders dan
+// bij voorraad/gerepareerd passen ze elkaar NIET automatisch aan en
+// beginnen ze allebei op 0 — bewust, om te voorkomen dat er per ongeluk
+// een verkeerd (automatisch aangevuld) aantal blijft staan.
+function _openMagazijnVraagScherm(item) {
+  document.getElementById('scherm-tagnr').classList.remove('open');
+  document.getElementById('scherm-vg-vraag').classList.remove('open');
+  document.getElementById('mv-artikel-label').textContent = `${item.label} · totaal ${item.aantal} stuks`;
+  document.getElementById('mv-voortgang').textContent      = `Artikel ${_tagnrQueueIdx + 1} van ${_tagnrQueue.length}`;
+  // Voorvullen met een eerder gegeven antwoord (bv. bij teruggaan), anders op 0.
+  const bestaand = _tagnrMagazijn.get(item.id);
+  document.getElementById('mv-gm-aantal').value = bestaand ? (bestaand.gmAantal || 0) : 0;
+  document.getElementById('mv-nw-aantal').value = bestaand ? (bestaand.nwAantal || 0) : 0;
+  document.getElementById('mv-error').style.display = 'none';
+  document.getElementById('mv-waarschuwing').style.display = 'none';
+  const vorigeBtn = document.getElementById('mv-vorige-btn');
+  if (vorigeBtn) vorigeBtn.style.display = _tagnrQueueIdx > 0 ? '' : 'none';
+  _renderMagazijnVraagAantallen(item);
+  document.getElementById('scherm-magazijn-vraag').classList.add('open');
+}
+
+// Eén stap terug vanaf de magazijn-vraag: naar het vorige artikel/stroom
+// in de queue (of, als dat er ook een was, diens eigen vg-vraag).
+function vorigeMagazijnVraag() {
+  if (_tagnrQueueIdx <= 0) return;
+  document.getElementById('scherm-magazijn-vraag').classList.remove('open');
+  _tagnrQueueIdx--;
+  _openTagnrScherm();
+}
+
+// Live waarschuwen (zelfde idioom als herberekeenBulkTijd) zolang GM+NW
+// niet optellen tot item.aantal.
+function _renderMagazijnVraagAantallen(item) {
+  const waarschuwing = document.getElementById('mv-waarschuwing');
+  const gm = parseInt(document.getElementById('mv-gm-aantal').value) || 0;
+  const nw = parseInt(document.getElementById('mv-nw-aantal').value) || 0;
+  const diff = item.aantal - (gm + nw);
+  if (diff !== 0) {
+    waarschuwing.textContent = diff > 0
+      ? `⚠ ${diff} te weinig (totaal moet ${item.aantal} zijn)`
+      : `⚠ ${Math.abs(diff)} te veel (totaal moet ${item.aantal} zijn)`;
+    waarschuwing.style.display = '';
+  } else {
+    waarschuwing.style.display = 'none';
+  }
+}
+
+function magazijnVraagWijziging() {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  if (item) _renderMagazijnVraagAantallen(item);
+}
+
+function magazijnAantalStap(veld, delta) {
+  const el = document.getElementById(veld === 'gm' ? 'mv-gm-aantal' : 'mv-nw-aantal');
+  el.value = Math.max(0, (parseInt(el.value) || 0) + delta);
+  magazijnVraagWijziging();
+}
+
+// "Max": dit magazijn krijgt in één keer het volledige regel-aantal, de
+// andere gaat naar 0 — snelkoppeling voor het (meest voorkomende) geval
+// dat alles uit één magazijn komt.
+function magazijnAantalMax(veld) {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  if (!item) return;
+  document.getElementById('mv-gm-aantal').value = veld === 'gm' ? item.aantal : 0;
+  document.getElementById('mv-nw-aantal').value = veld === 'nw' ? item.aantal : 0;
+  magazijnVraagWijziging();
+}
+
+function bevestigMagazijnVraag() {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  if (!item) return;
+  const errEl = document.getElementById('mv-error');
+  const gmAantal = parseInt(document.getElementById('mv-gm-aantal').value) || 0;
+  const nwAantal = parseInt(document.getElementById('mv-nw-aantal').value) || 0;
+  if (gmAantal + nwAantal !== item.aantal) {
+    errEl.textContent = `Aantallen moeten optellen tot ${item.aantal}`; errEl.style.display = ''; return;
+  }
+  errEl.style.display = 'none';
+  _tagnrMagazijn.set(item.id, { gm: gmAantal > 0, nw: nwAantal > 0, gmAantal, nwAantal });
+  document.getElementById('scherm-magazijn-vraag').classList.remove('open');
+  _openTagnrScherm(); // _tagnrMagazijn.has(item.id) is nu true → valt door naar normale tagnr-render
+}
+
+// Splitst één regel-item (HUUR/RUIL, magazijn-vraag + voorraad/gerepareerd-
+// verdeling beantwoord) in maximaal 3 scanstromen op dezelfde plek in de queue.
+function _splitsTagnrItemInStromen(item, mag) {
+  const vg = _tagnrVoorraadGerepareerd.get(item.id); // undefined als gmAantal === 0
+  const stromen = [];
+  if (mag.gmAantal > 0) {
+    const voorraadAantal    = vg?.voorraadAantal    ?? mag.gmAantal;
+    const gerepareerdAantal = vg?.gerepareerdAantal ?? 0;
+    if (voorraadAantal > 0)    stromen.push({ id: `${item.id}::gm_voorraad`,    regelId: item.id, stream: 'gm_voorraad',    label: `${item.label} · GM · uit voorraad`, aantal: voorraadAantal });
+    if (gerepareerdAantal > 0) stromen.push({ id: `${item.id}::gm_gerepareerd`, regelId: item.id, stream: 'gm_gerepareerd', label: `${item.label} · GM · gerepareerd`,   aantal: gerepareerdAantal });
+  }
+  if (mag.nwAantal > 0) stromen.push({ id: `${item.id}::nw`, regelId: item.id, stream: 'nw', label: `${item.label} · NW`, aantal: mag.nwAantal });
+  _tagnrQueue.splice(_tagnrQueueIdx, 1, ...stromen);
+}
+
+// ── VOORRAAD/GEREPAREERD-VRAAG (alleen als gmAantal > 0) ────────
+// Verschijnt direct na de magazijn-vraag. Zelfde opzet als de GM/NW-vraag:
+// beide velden beginnen op 0 en passen elkaar NIET automatisch aan (geen
+// auto-aanvulling van 'voorraad' naar het maximum) — de monteur vult zelf
+// beide in, met live waarschuwing totdat de som klopt. Bewust zo om
+// dezelfde reden als bij GM/NW: voorkomen dat er per ongeluk een
+// automatisch ingevuld (en dus mogelijk fout) aantal blijft staan.
+function _openVoorraadGerepareerdScherm(item, mag) {
+  document.getElementById('scherm-tagnr').classList.remove('open');
+  document.getElementById('scherm-magazijn-vraag').classList.remove('open');
+  document.getElementById('vg-artikel-label').textContent = `${item.label} · GM · totaal ${mag.gmAantal} stuks`;
+  document.getElementById('vg-voortgang').textContent      = `Artikel ${_tagnrQueueIdx + 1} van ${_tagnrQueue.length}`;
+  // Voorvullen met een eerder gegeven antwoord (bv. bij teruggaan), anders op 0.
+  const bestaand = _tagnrVoorraadGerepareerd.get(item.id);
+  document.getElementById('vg-gerepareerd-aantal').value = bestaand ? bestaand.gerepareerdAantal : 0;
+  document.getElementById('vg-voorraad-aantal').value    = bestaand ? bestaand.voorraadAantal    : 0;
+  document.getElementById('vg-error').style.display = 'none';
+  document.getElementById('vg-waarschuwing').style.display = 'none';
+  _renderVgAantallen(mag);
+  document.getElementById('scherm-vg-vraag').classList.add('open');
+}
+
+// Live waarschuwen (zelfde idioom als de GM/NW-vraag) zolang Gerepareerd +
+// Voorraad niet optellen tot mag.gmAantal.
+function _renderVgAantallen(mag) {
+  const waarschuwing = document.getElementById('vg-waarschuwing');
+  const gerepareerd = parseInt(document.getElementById('vg-gerepareerd-aantal').value) || 0;
+  const voorraad    = parseInt(document.getElementById('vg-voorraad-aantal').value) || 0;
+  const diff = mag.gmAantal - (gerepareerd + voorraad);
+  if (diff !== 0) {
+    waarschuwing.textContent = diff > 0
+      ? `⚠ ${diff} te weinig (totaal moet ${mag.gmAantal} zijn)`
+      : `⚠ ${Math.abs(diff)} te veel (totaal moet ${mag.gmAantal} zijn)`;
+    waarschuwing.style.display = '';
+  } else {
+    waarschuwing.style.display = 'none';
+  }
+}
+
+function vgAantalWijziging() {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const mag  = item && _tagnrMagazijn.get(item.id);
+  if (mag) _renderVgAantallen(mag);
+}
+
+function vgAantalStap(veld, delta) {
+  const el = document.getElementById(veld === 'gerepareerd' ? 'vg-gerepareerd-aantal' : 'vg-voorraad-aantal');
+  el.value = Math.max(0, (parseInt(el.value) || 0) + delta);
+  vgAantalWijziging();
+}
+
+// "Max": dit veld krijgt in één keer het volledige GM-aantal, het andere
+// gaat naar 0 — zelfde snelkoppeling als magazijnAantalMax().
+function vgAantalMax(veld) {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const mag  = item && _tagnrMagazijn.get(item.id);
+  if (!mag) return;
+  document.getElementById('vg-gerepareerd-aantal').value = veld === 'gerepareerd' ? mag.gmAantal : 0;
+  document.getElementById('vg-voorraad-aantal').value    = veld === 'voorraad'    ? mag.gmAantal : 0;
+  vgAantalWijziging();
+}
+
+// Eén stap terug vanaf de voorraad/gerepareerd-vraag: naar de magazijn-
+// vraag van dezelfde regel (voorgevuld met de eerder gemaakte keuze).
+function vorigeVoorraadGerepareerdVraag() {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  if (!item) return;
+  document.getElementById('scherm-vg-vraag').classList.remove('open');
+  _openMagazijnVraagScherm(item);
+}
+
+function bevestigVoorraadGerepareerdVraag() {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  if (!item) return;
+  const mag = _tagnrMagazijn.get(item.id);
+  const errEl = document.getElementById('vg-error');
+  const gerepareerdAantal = parseInt(document.getElementById('vg-gerepareerd-aantal').value) || 0;
+  const voorraadAantal    = parseInt(document.getElementById('vg-voorraad-aantal').value) || 0;
+  if (gerepareerdAantal + voorraadAantal !== mag.gmAantal) {
+    errEl.textContent = `Aantallen moeten optellen tot ${mag.gmAantal}`; errEl.style.display = ''; return;
+  }
+  errEl.style.display = 'none';
+  _tagnrVoorraadGerepareerd.set(item.id, { voorraadAantal, gerepareerdAantal });
+  document.getElementById('scherm-vg-vraag').classList.remove('open');
+  _splitsTagnrItemInStromen(item, mag);
   _openTagnrScherm();
 }
 
@@ -3983,7 +4343,16 @@ function _openTagnrScherm() {
     const cb = _tagnrOnDone; _tagnrOnDone = null; cb?.();
     return;
   }
-  const item   = _tagnrQueue[_tagnrQueueIdx];
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const r    = state.reparaties.find(x => x.id === (item.regelId ?? item.id));
+  if (!item.stream && isHuurRuilCode(r)) {
+    if (!_tagnrMagazijn.has(item.id)) { _openMagazijnVraagScherm(item); return; }
+    const mag = _tagnrMagazijn.get(item.id);
+    if (mag.gmAantal > 0 && !_tagnrVoorraadGerepareerd.has(item.id)) { _openVoorraadGerepareerdScherm(item, mag); return; }
+    _splitsTagnrItemInStromen(item, mag);
+    _openTagnrScherm();
+    return;
+  }
   const gescand = _tagnrGescand.get(item.id) || [];
   document.getElementById('tagnr-artikel-label').textContent  = item.label;
   document.getElementById('tagnr-voortgang').textContent       = `Artikel ${_tagnrQueueIdx + 1} van ${_tagnrQueue.length}`;
@@ -3991,16 +4360,61 @@ function _openTagnrScherm() {
   document.getElementById('tagnr-input').value = '';
   document.getElementById('tagnr-error').style.display = 'none';
   document.getElementById('tagnr-reeks-paneel').style.display = 'none';
+  // "Vorige" kan altijd bij een gesplitste (HUUR/RUIL) stroom — desnoods
+  // terug naar de eigen magazijn-/vg-vraag van deze regel (zie
+  // vorigeTagnrRegel()) — en verder gewoon zodra er een vorig queue-item is.
   const vorigeBtn = document.getElementById('tagnr-vorige-btn');
-  if (vorigeBtn) vorigeBtn.style.display = _tagnrQueueIdx > 0 ? '' : 'none';
+  if (vorigeBtn) vorigeBtn.style.display = (_tagnrQueueIdx > 0 || !!item.stream) ? '' : 'none';
+  // Reeks-invoer (bulk van/tot) alleen verbergen voor de gerepareerd-stroom
+  // — elk tagnummer daar heeft zijn eigen diagnose/werkzaamheden nodig.
+  const reeksWrap = document.getElementById('tagnr-reeks-toggle-wrap');
+  if (reeksWrap) reeksWrap.style.display = item.stream === 'gm_gerepareerd' ? 'none' : '';
   _renderTagnrLijst(item, gescand);
   document.getElementById('scherm-tagnr').classList.add('open');
   setTimeout(() => document.getElementById('tagnr-input')?.focus(), 80);
 }
 
+// Verwijdert alle scanstroom-subitems van deze regel weer uit de queue en
+// zet 'm terug als één ongesplitst item op dezelfde plek, zodat de
+// magazijn-/vg-vraag opnieuw (voorgevuld, zie _openMagazijnVraagScherm/
+// _openVoorraadGerepareerdScherm) getoond kan worden. Geeft het herstelde
+// placeholder-item terug. _tagnrMagazijn/_tagnrVoorraadGerepareerd worden
+// bewust niet gewist — die voeden juist de voorvulling zodra je niets
+// wijzigt en gewoon weer op "Volgende" klikt.
+function _herstelTagnrPlaceholder(streamItem) {
+  const regelId    = streamItem.regelId;
+  const eersteIdx  = _tagnrQueue.findIndex(it => (it.regelId ?? it.id) === regelId);
+  const aantalRijen = _tagnrQueue.filter(it => (it.regelId ?? it.id) === regelId).length;
+  const r      = state.reparaties.find(x => x.id === regelId);
+  const label  = [r?.artikelcode, r?.artikelomschrijving].filter(Boolean).join(' · ') || regelId;
+  const aantal = Math.max(r?.aantal || 1, 1);
+  const placeholder = { id: regelId, label, aantal };
+  _tagnrQueue.splice(eersteIdx, aantalRijen, placeholder);
+  _tagnrQueueIdx = eersteIdx;
+  return placeholder;
+}
+
 // Terug naar het vorige artikel in de scan-queue (bv. om een tagnummer nog aan
-// te passen) — al ingevoerde tagnummers per artikel blijven staan in _tagnrGescand.
+// te passen) — al ingevoerde tagnummers per artikel blijven staan in
+// _tagnrGescand. Sta je op de EERSTE scanstroom van een HUUR/RUIL-regel
+// (GM-voorraad, GM-gerepareerd of NW — wat er als eerste kwam), dan gaat
+// "Vorige" terug naar de vg-vraag (als die er was) of anders de
+// magazijn-vraag van diezelfde regel, in plaats van naar de vorige regel.
 function vorigeTagnrRegel() {
+  const huidig = _tagnrQueue[_tagnrQueueIdx];
+  if (!huidig) return;
+  const regelId = huidig.regelId ?? huidig.id;
+  const vorigeItem = _tagnrQueue[_tagnrQueueIdx - 1];
+  const eersteVanRegel = huidig.stream &&
+    (_tagnrQueueIdx === 0 || (vorigeItem.regelId ?? vorigeItem.id) !== regelId);
+  if (eersteVanRegel) {
+    document.getElementById('scherm-tagnr').classList.remove('open');
+    const item = _herstelTagnrPlaceholder(huidig);
+    const mag  = _tagnrMagazijn.get(item.id);
+    if (mag && mag.gmAantal > 0) _openVoorraadGerepareerdScherm(item, mag);
+    else _openMagazijnVraagScherm(item);
+    return;
+  }
   if (_tagnrQueueIdx <= 0) return;
   _tagnrQueueIdx--;
   _openTagnrScherm();
@@ -4011,10 +4425,17 @@ function vorigeTagnrRegel() {
 // tot die subset via bulkAfrondIds) — nog niet voltooide artikelen worden overgeslagen
 // en moeten later apart afgerond worden.
 function annuleerTagnrScherm() {
-  const voltooideIds = _tagnrQueue
-    .filter(it => (_tagnrGescand.get(it.id) || []).length >= it.aantal)
-    .map(it => it.id);
-  const totaal = _tagnrQueue.length;
+  // Per regel (niet per GM/NW-scanstroom) bepalen of alles voltooid is —
+  // een gesplitste regel telt pas mee als zowel zijn GM- als NW-stroom
+  // (voor zover aanwezig in de queue) hun aantal gehaald hebben.
+  const perRegel = new Map(); // regelId → alle bijbehorende queue-items klaar?
+  for (const it of _tagnrQueue) {
+    const regelId = it.regelId ?? it.id;
+    const klaar = (_tagnrGescand.get(it.id) || []).length >= it.aantal;
+    perRegel.set(regelId, (perRegel.get(regelId) ?? true) && klaar);
+  }
+  const voltooideIds = [...perRegel.entries()].filter(([, klaar]) => klaar).map(([id]) => id);
+  const totaal = perRegel.size;
 
   const vraag = voltooideIds.length
     ? `Je hebt ${voltooideIds.length} van de ${totaal} artikel${totaal !== 1 ? 'en' : ''} volledig gescand. Wil je die opslaan? Nog niet voltooide artikelen worden dan overgeslagen — die kun je later apart afronden.`
@@ -4022,6 +4443,8 @@ function annuleerTagnrScherm() {
   if (!confirm(vraag)) return;
 
   document.getElementById('scherm-tagnr').classList.remove('open');
+  document.getElementById('scherm-magazijn-vraag').classList.remove('open');
+  document.getElementById('scherm-vg-vraag').classList.remove('open');
   const cb = _tagnrOnDone;
   _tagnrOnDone   = null;
   _tagnrQueue    = [];
@@ -4039,12 +4462,84 @@ function _renderTagnrLijst(item, gescand) {
   const btn = document.getElementById('tagnr-volgende-btn');
   btn.disabled = false;
   btn.textContent = _tagnrQueueIdx < _tagnrQueue.length - 1 ? 'Volgende →' : 'Klaar ✓';
-  document.getElementById('tagnr-lijst').innerHTML = gescand.map((t, i) => `
-    <div class="tagnr-rij">
-      <span class="tagnr-rij-nr">${i + 1}</span>
-      <span class="tagnr-rij-waarde">${esc(t)}</span>
-      <button class="tagnr-rij-del" onclick="verwijderTagnr(${i})" title="Verwijder">×</button>
-    </div>`).join('');
+  const isGerepareerd = item.stream === 'gm_gerepareerd';
+  const meta = _tagnrGescandMeta.get(item.id) || [];
+  document.getElementById('tagnr-lijst').innerHTML = gescand.map((t, i) => {
+    const m = meta[i] || {};
+    // Zelfde velden/opzet als het normale afrond-scherm (modal-afrond):
+    // diagnose, werkzaamheden, gebruikte onderdelen, bestede tijd met
+    // dezelfde >10-uur-waarschuwing — maar dan per gerepareerd tagnummer.
+    const onderdelenHTML = (m.onderdelen || []).length
+      ? (m.onderdelen || []).map((o, oi) => `<span class="onderdeel-tag">${esc(o.label)}<button class="onderdeel-tag-remove" onclick="verwijderTagnrOnderdeel(${i},${oi})">×</button></span>`).join('')
+      : `<span class="onderdeel-tags-leeg">Geen onderdelen toegevoegd</span>`;
+    const reparatieHTML = !isGerepareerd ? '' : `
+      <div class="tagnr-reparatie-kaart">
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">Diagnose / wat was het probleem?</label>
+          <textarea class="form-textarea" placeholder="Beschrijf de oorzaak van het defect..." style="min-height:56px"
+            oninput="zetTagnrVeld(${i},'diagnose',this.value)">${esc(m.diagnose || '')}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">Wat heb je gedaan?</label>
+          <textarea class="form-textarea" placeholder="Omschrijf de uitgevoerde werkzaamheden..." style="min-height:56px"
+            oninput="zetTagnrVeld(${i},'werkzaamheden',this.value)">${esc(m.werkzaamheden || '')}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">Gebruikte onderdelen</label>
+          <div class="onderdeel-tags">${onderdelenHTML}</div>
+          <input type="text" class="form-input" placeholder="Extra onderdeel toevoegen..." id="tagnr-onderdeel-input-${i}"
+            style="margin-top:6px" onkeydown="if(event.key==='Enter'){event.preventDefault();voegTagnrOnderdeelToe(${i})}">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Bestede tijd</label>
+          <div class="tijd-row">
+            <input type="number" class="form-input tijd-input${(parseInt(m.uren) || 0) >= 10 ? ' uren-hoog' : ''}" placeholder="0" min="0" max="99" value="${m.uren || ''}"
+              oninput="zetTagnrVeld(${i},'uren',this.value);controleerUren(this,'tagnr-uren-waarschuwing-${i}')"
+              onblur="controleerUren(this,'tagnr-uren-waarschuwing-${i}')">
+            <span class="tijd-label-sm">uur</span>
+            <input type="number" class="form-input tijd-input" placeholder="0" min="0" max="59" value="${m.minuten || ''}"
+              oninput="zetTagnrVeld(${i},'minuten',this.value)">
+            <span class="tijd-label-sm">min</span>
+          </div>
+          <div class="uren-waarschuwing" id="tagnr-uren-waarschuwing-${i}"${(parseInt(m.uren) || 0) >= 10 ? ' style="display:block"' : ''}>⚠ Grote hoeveelheid tijd geselecteerd</div>
+        </div>
+      </div>`;
+    return `
+      <div class="tagnr-rij-wrap">
+        <div class="tagnr-rij">
+          <span class="tagnr-rij-nr">${i + 1}</span>
+          <span class="tagnr-rij-waarde">${esc(t)}</span>
+          <button class="tagnr-rij-del" onclick="verwijderTagnr(${i})" title="Verwijder">×</button>
+        </div>
+        ${reparatieHTML}
+      </div>`;
+  }).join('');
+}
+
+function zetTagnrVeld(idx, veld, waarde) {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const meta = _tagnrGescandMeta.get(item.id) || [];
+  meta[idx] = { ...meta[idx], [veld]: waarde };
+  _tagnrGescandMeta.set(item.id, meta);
+}
+
+function voegTagnrOnderdeelToe(idx) {
+  const input = document.getElementById(`tagnr-onderdeel-input-${idx}`);
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const meta = _tagnrGescandMeta.get(item.id) || [];
+  meta[idx] = { ...meta[idx], onderdelen: [...(meta[idx]?.onderdelen || []), { label: val }] };
+  _tagnrGescandMeta.set(item.id, meta);
+  _renderTagnrLijst(item, _tagnrGescand.get(item.id) || []);
+}
+
+function verwijderTagnrOnderdeel(idx, onderdeelIdx) {
+  const item = _tagnrQueue[_tagnrQueueIdx];
+  const meta = _tagnrGescandMeta.get(item.id) || [];
+  meta[idx] = { ...meta[idx], onderdelen: (meta[idx]?.onderdelen || []).filter((_, i) => i !== onderdeelIdx) };
+  _tagnrGescandMeta.set(item.id, meta);
+  _renderTagnrLijst(item, _tagnrGescand.get(item.id) || []);
 }
 
 function voegTagnrToe() {
@@ -4064,7 +4559,9 @@ function voegTagnrToe() {
     : `Alle ${item.aantal} ingevoerd`;
   _renderTagnrLijst(item, gescand);
   if (gescand.length >= item.aantal) {
-    setTimeout(() => bevestigTagnrRegel(), 150);
+    // Gerepareerd-stroom: monteur klikt zelf op "Volgende" nadat
+    // diagnose/werkzaamheden per tagnummer zijn ingevuld.
+    if (item.stream !== 'gm_gerepareerd') setTimeout(() => bevestigTagnrRegel(), 150);
   } else {
     setTimeout(() => document.getElementById('tagnr-input')?.focus(), 50);
   }
@@ -4074,6 +4571,8 @@ function verwijderTagnr(idx) {
   const item   = _tagnrQueue[_tagnrQueueIdx];
   const gescand = (_tagnrGescand.get(item.id) || []).filter((_, i) => i !== idx);
   _tagnrGescand.set(item.id, gescand);
+  const meta = (_tagnrGescandMeta.get(item.id) || []).filter((_, i) => i !== idx);
+  _tagnrGescandMeta.set(item.id, meta);
   document.getElementById('tagnr-apparaat-label').textContent = `${gescand.length + 1} van ${item.aantal} in te voeren`;
   _renderTagnrLijst(item, gescand);
 }
@@ -4113,7 +4612,9 @@ function voegReeksToe() {
   document.getElementById('tagnr-apparaat-label').textContent = gescand.length < item.aantal
     ? `${gescand.length + 1} van ${item.aantal} in te voeren` : `Alle ${item.aantal} ingevoerd`;
   _renderTagnrLijst(item, gescand);
-  if (gescand.length >= item.aantal) { setTimeout(() => bevestigTagnrRegel(), 150); }
+  // Reeks-invoer is voor de GM-stroom verborgen (zie _openTagnrScherm), maar
+  // defensief dezelfde guard als in voegTagnrToe():
+  if (gescand.length >= item.aantal && item.stream !== 'gm_gerepareerd') { setTimeout(() => bevestigTagnrRegel(), 150); }
 }
 
 function renderAfrondTagnrLijst() {
@@ -4203,15 +4704,76 @@ function bevestigTagnrRegel() {
     if (errEl) { errEl.textContent = 'Voer eerst een tagnummer in'; errEl.style.display = ''; }
     return;
   }
+  if (item.stream === 'gm_gerepareerd') {
+    const meta = _tagnrGescandMeta.get(item.id) || [];
+    const errEl = document.getElementById('tagnr-error');
+    const onvolledig = gescand.some((_, i) => !(meta[i]?.diagnose || '').trim() || !(meta[i]?.werkzaamheden || '').trim());
+    if (onvolledig) {
+      if (errEl) { errEl.textContent = 'Vul voor elk tagnummer diagnose en werkzaamheden in'; errEl.style.display = ''; }
+      return;
+    }
+  }
   _tagnrQueueIdx++;
   _openTagnrScherm();
 }
 
-function _insertTagnrScans(logId, reparatieId, opdrachtnr, regelnummer, artikelcode, monteurId, now) {
-  const tagnrs = _tagnrGescand.get(reparatieId) || [];
-  return Promise.all(tagnrs.map(tagnr =>
-    sb.from('tagnr_scans').insert({ reparatie_log_id: logId, reparatie_id: reparatieId, opdrachtnr, regelnummer, artikelcode, tagnr, monteur_id: monteurId, aangemaakt_op: now })
-  ));
+// Slaat de gescande tagnummers op in tagnr_scans. Voor een niet-opgesplitste
+// regel (geen HUUR/RUIL-magazijnkeuze) zit alles direct onder reparatieId,
+// ongewijzigd t.o.v. voorheen. Voor een HUUR/RUIL-regel met magazijnkeuze
+// zit de data onder de gm_voorraad/gm_gerepareerd/nw-stream-sleutels (zie
+// _splitsTagnrItemInStromen). gm_voorraad en nw krijgen alleen een gewone
+// tagnr_scans-rij (gekoppeld aan de gedeelde 'afgerond'-logregel) — alleen
+// gm_gerepareerd krijgt per tagnummer een eigen losse 'gm_reparatie'-rij in
+// reparatie_logs (mét diagnose/werkzaamheden/tijd/onderdelen van dát
+// specifieke apparaat), zodat elk gerepareerd apparaat los te
+// registreren/analyseren is.
+async function _insertTagnrScans(logId, reparatieId, opdrachtnr, regelnummer, artikelcode, monteurId, now) {
+  const directe = _tagnrGescand.get(reparatieId);
+  if (directe !== undefined) {
+    return Promise.all(directe.map(tagnr =>
+      sb.from('tagnr_scans').insert({ reparatie_log_id: logId, reparatie_id: reparatieId, opdrachtnr, regelnummer, artikelcode, tagnr, monteur_id: monteurId, aangemaakt_op: now })
+    ));
+  }
+
+  const r = state.reparaties.find(x => x.id === reparatieId);
+  for (const stream of ['gm_voorraad', 'gm_gerepareerd', 'nw']) {
+    const key    = `${reparatieId}::${stream}`;
+    const tagnrs = _tagnrGescand.get(key) || [];
+    const meta   = _tagnrGescandMeta.get(key) || [];
+    for (let i = 0; i < tagnrs.length; i++) {
+      const tagnr = tagnrs[i];
+      const m = meta[i] || {};
+      let tagLogId = logId; // standaard: gedeelde 'afgerond'-logregel van de hele regel
+      if (stream === 'gm_gerepareerd') {
+        const onderdelenStr = (m.onderdelen || []).map(o => o.label).join(', ');
+        const tijdMin = (parseInt(m.uren) || 0) * 60 + (parseInt(m.minuten) || 0);
+        const notitie = [
+          m.diagnose      ? `Diagnose: ${m.diagnose}`           : '',
+          m.werkzaamheden ? `Werkzaamheden: ${m.werkzaamheden}` : '',
+        ].filter(Boolean).join('\n\n');
+        const gmLogRij = await insertLog({
+          reparatie_id: reparatieId,
+          monteur_id: monteurId,
+          monteur_naam: state.monteur?.naam,
+          actie: 'gm_reparatie',
+          opdrachtnr, regelnummer,
+          opdrachtcode: r?.opdrachtcode || null,
+          artikelcode,
+          artikelomschrijving: r?.artikelomschrijving || null,
+          serienummer: r?.serienummer || null,
+          tagnummer: tagnr,
+          notitie: notitie || null,
+          diagnose: m.diagnose || null,
+          werkzaamheden: m.werkzaamheden || null,
+          gebruikte_onderdelen: onderdelenStr || null,
+          bestede_tijd_minuten: tijdMin || null,
+          aangemaakt_op: now,
+        });
+        tagLogId = gmLogRij?.id ?? logId;
+      }
+      await sb.from('tagnr_scans').insert({ reparatie_log_id: tagLogId, reparatie_id: reparatieId, opdrachtnr, regelnummer, artikelcode, tagnr, monteur_id: monteurId, aangemaakt_op: now });
+    }
+  }
 }
 
 function startVragenQueue(ids, onDone) {
@@ -4396,12 +4958,12 @@ function openVragenscherm(reparatieId, positie, totaal, modus = 'artikel') {
   document.getElementById('scherm-vragen').classList.add('open');
 }
 
-function controleerUren(el) {
+function controleerUren(el, waarschuwingId) {
   const v    = parseInt(el.value) || 0;
   const hoog = v >= 10;
   el.classList.toggle('uren-hoog', hoog);
-  const waarschuwingId = el.id === 'ma-uren' ? 'ma-uren-waarschuwing' : 'mab-uren-waarschuwing';
-  const w = document.getElementById(waarschuwingId);
+  const id = waarschuwingId || (el.id === 'ma-uren' ? 'ma-uren-waarschuwing' : 'mab-uren-waarschuwing');
+  const w = document.getElementById(id);
   if (w) w.style.display = hoog ? 'block' : 'none';
 }
 
@@ -5569,6 +6131,249 @@ async function prepKoppel(apparaatId, tagnr) {
 }
 
 // ── LOCATIE MODULE ────────────────────────────────────────────
+
+// AMF-limiet op MAGAZIJNLOCATIE: max. 15 tekens. Deze waarde gaat via
+// reparatie_logs.magazijnlocatie → bouwAmfPayload() (backend/sync.js) naar
+// AMF; een langere waarde wordt daar geweigerd. Hier al afvangen zodat de
+// monteur meteen feedback krijgt i.p.v. pas bij een mislukte AMF-push.
+const MAGAZIJNLOCATIE_MAX_LENGTE = 15;
+
+// Twee modi: 'opdrachten' (standaard — magazijnlocatie zetten op orders uit
+// reparaties) en 'tagnummer' (legacy — de oude scan-tag-naar-locatie-flow,
+// zie verderop). De tab opent altijd in 'opdrachten' (switchTab()).
+function locSwitchMode(mode) {
+  document.getElementById('loc-mode-opdrachten')?.classList.toggle('actief', mode === 'opdrachten');
+  document.getElementById('loc-mode-tagnummer')?.classList.toggle('actief', mode === 'tagnummer');
+  const opdrWrap = document.getElementById('loc-opdrachten-wrap');
+  const tagWrap  = document.getElementById('loc-tagnummer-wrap');
+  if (opdrWrap) opdrWrap.style.display = mode === 'opdrachten' ? '' : 'none';
+  if (tagWrap)  tagWrap.style.display  = mode === 'tagnummer'  ? '' : 'none';
+
+  if (mode === 'opdrachten') {
+    laadVeelgebruikteLocaties().then(renderLocOpdrachten);
+  } else {
+    locReset();
+    locLaadVandaagLog();
+  }
+}
+
+async function laadVeelgebruikteLocaties() {
+  try {
+    const { data, error } = await sb.from('veelgebruikte_locaties').select('*').order('volgorde', { ascending: true });
+    if (error) throw error;
+    state.veelgebruikteLocaties = data || [];
+  } catch {
+    state.veelgebruikteLocaties = []; // snelkeuze-balk is optioneel — stil falen, typen blijft mogelijk
+  }
+}
+
+// Filtert op dezelfde velden als groepMatchFilter() in renderLists(), maar
+// dan over de VOLLEDIGE reparaties-lijst (geen claim-/status-filtering) —
+// deze tab toont letterlijk alles: open, in behandeling én afgerond.
+function locGroepMatchFilter(groep, zoek, ms) {
+  const h = groep[0];
+  if (zoek && ![h.opdrachtnr, h.opdrachtcode, h.artikelcode, h.klant_naam]
+    .some(v => v?.toLowerCase().includes(zoek))) return false;
+  if (ms.opdrachtcode.size   && !groep.some(r => ms.opdrachtcode.has(r.opdrachtcode)))    return false;
+  if (ms.handeling.size      && !groep.some(r =>
+    (r.handeling || '').split('+').map(s => s.trim()).some(d => ms.handeling.has(d))))    return false;
+  if (ms.werkplaats.size     && !groep.some(r => ms.werkplaats.has(r.werkplaats)))        return false;
+  if (ms.organisatie.size    && !groep.some(r => ms.organisatie.has(r.organisatie)))      return false;
+  if (ms.landcode.size       && !groep.some(r => ms.landcode.has(r.landcode)))            return false;
+  if (ms.opdrachtstatus.size && !groep.some(r => ms.opdrachtstatus.has(r.opdrachtstatus))) return false;
+  if (ms.reden_datum.size    && !groep.some(r => ms.reden_datum.has(r.reden_datum)))      return false;
+  return true;
+}
+
+function renderLocOpdrachten() {
+  const lijst = document.getElementById('list-loc-opdrachten');
+  if (!lijst || !state.reparaties?.length) { if (lijst) lijst.innerHTML = emptyHTML('Nog geen opdrachten geladen'); return; }
+
+  const groepen = {};
+  state.reparaties.forEach(r => {
+    if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
+    groepen[r.opdrachtnr].push(r);
+  });
+  const alleGroepen = Object.values(groepen);
+
+  const uniek = (veld) => [...new Set(alleGroepen.flatMap(g => g.map(r => r[veld])).filter(Boolean))].sort();
+  const uniekSplit = (veld) => [...new Set(
+    alleGroepen.flatMap(g => g.flatMap(r => (r[veld] || '').split('+').map(s => s.trim()).filter(Boolean)))
+  )].sort();
+
+  maakMultiSelect('ms-loc-opdrachtcode',   uniek('opdrachtcode'));
+  maakMultiSelect('ms-loc-opdrachtstatus', uniek('opdrachtstatus'));
+  maakMultiSelect('ms-loc-landcode',       uniek('landcode'));
+  maakMultiSelect('ms-loc-handeling',      uniekSplit('handeling'));
+  maakMultiSelect('ms-loc-organisatie',    uniek('organisatie'));
+  maakMultiSelect('ms-loc-werkplaats',     uniek('werkplaats'));
+  maakMultiSelect('ms-loc-reden-datum',    uniek('reden_datum'));
+
+  const zoek = (document.getElementById('af-loc-zoek')?.value || '').trim().toLowerCase();
+  const ms = {
+    opdrachtcode:   leesMultiSelect('ms-loc-opdrachtcode'),
+    handeling:      leesMultiSelect('ms-loc-handeling'),
+    werkplaats:     leesMultiSelect('ms-loc-werkplaats'),
+    organisatie:    leesMultiSelect('ms-loc-organisatie'),
+    landcode:       leesMultiSelect('ms-loc-landcode'),
+    opdrachtstatus: leesMultiSelect('ms-loc-opdrachtstatus'),
+    reden_datum:    leesMultiSelect('ms-loc-reden-datum'),
+  };
+  document.getElementById('af-loc-reset')?.classList.toggle('actief', !!(zoek || Object.values(ms).some(s => s.size > 0)));
+
+  const gefilterd = alleGroepen
+    .filter(g => locGroepMatchFilter(g, zoek, ms))
+    .sort((a, b) => new Date(b[0].aangemaakt_op || 0) - new Date(a[0].aangemaakt_op || 0));
+
+  const teller = document.getElementById('count-loc');
+  if (teller) teller.textContent = gefilterd.length;
+
+  lijst.innerHTML = gefilterd.length
+    ? gefilterd.map(regels => locKaartHTML(regels)).join('')
+    : emptyHTML('Geen opdrachten gevonden');
+}
+
+function locKaartHTML(regels) {
+  const gesorteerd = [...regels].sort((a, b) => (a.regelnummer ?? 0) - (b.regelnummer ?? 0));
+  const hoofd   = gesorteerd.find(r => !isInstructieRegel(r)) || gesorteerd[0];
+  const safeId  = ('loc-' + hoofd.opdrachtnr).replace(/[^a-z0-9-]/gi, '_');
+  const huidige = hoofd.magazijnlocatie || '';
+
+  const regelsHTML = gesorteerd.map(r => `
+    <div class="regel-rij">
+      <div class="regel-info">
+        <span class="regel-handeling">${[r.artikelcode, r.artikelomschrijving].filter(Boolean).map(esc).join(' · ') || esc(r.handeling) || '—'}</span>
+        ${r.regelnummer != null ? `<span class="regel-nr">#${r.regelnummer}</span>` : ''}
+      </div>
+      <span style="font-size:10px;font-family:var(--mono);background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:1px 5px;white-space:nowrap">${esc(r.status || r.opdrachtstatus || '—')}</span>
+    </div>`).join('');
+
+  return `
+    <div class="opdracht-groep">
+      <div class="groep-header" onclick="locToggleKaart('${safeId}','${hoofd.opdrachtnr}')">
+        <div class="groep-header-links">
+          <span class="card-nummer">${esc(hoofd.opdrachtnr)}</span>
+          ${hoofd.opdrachtcode ? `<span class="groep-code">${esc(hoofd.opdrachtcode)}</span>` : ''}
+          ${hoofd.klant_naam   ? `<span style="font-size:12px;color:var(--muted)">${esc(hoofd.klant_naam)}</span>` : ''}
+          ${huidige
+            ? `<span style="font-size:10px;font-family:var(--mono);background:#e8f4ff;color:var(--info);border:1px solid #b8d4f0;border-radius:3px;padding:1px 5px;white-space:nowrap">📦 ${esc(huidige)}</span>`
+            : `<span style="font-size:10px;color:var(--muted)">Geen locatie</span>`}
+        </div>
+        <span class="groep-chevron" id="chevron-${safeId}">▸</span>
+      </div>
+      <div class="groep-regels">${regelsHTML}</div>
+      <div id="${safeId}" style="display:none">
+        <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <input type="text" id="loc-invoer-${safeId}" class="form-input" placeholder="Typ locatie…" value="${esc(huidige)}"
+            onkeydown="if(event.key==='Enter')locOpslaanOpdracht('${hoofd.opdrachtnr}','${safeId}',event)"
+            maxlength="${MAGAZIJNLOCATIE_MAX_LENGTE}"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <div class="loc-snel-rij" id="loc-snel-${safeId}"></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button type="button" class="claim-btn" onclick="locOpslaanOpdracht('${hoofd.opdrachtnr}','${safeId}',event)">Opslaan</button>
+            <span id="loc-status-${safeId}" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function locToggleKaart(safeId, opdrachtnr) {
+  const el      = document.getElementById(safeId);
+  const chevron = document.getElementById('chevron-' + safeId);
+  if (!el) return;
+  const opening = el.style.display === 'none';
+  el.style.display = opening ? 'block' : 'none';
+  chevron?.classList.toggle('open', opening);
+  if (opening) {
+    locVulSnelBalk(safeId, opdrachtnr);
+    document.getElementById(`loc-invoer-${safeId}`)?.focus();
+  }
+}
+
+function locVulSnelBalk(safeId, opdrachtnr) {
+  const wrap = document.getElementById(`loc-snel-${safeId}`);
+  if (!wrap || !state.veelgebruikteLocaties.length) return;
+  wrap.innerHTML = state.veelgebruikteLocaties.map(l =>
+    `<button type="button" class="loc-snel-chip" onclick="locKiesSnel('${safeId}','${jsStrEsc(opdrachtnr)}','${jsStrEsc(l.locatie)}')">${esc(l.locatie)}</button>`
+  ).join('');
+}
+
+// Kleine helper om enkele quotes in onclick-string-literals te ontwijken
+// (opdrachtnr/locatie komen normaliter zonder quotes voor, maar dit voorkomt
+// kapotte HTML in het randgeval dat dat een keer niet zo is).
+function jsStrEsc(v) {
+  return String(v ?? '').replace(/'/g, "\\'");
+}
+
+function locKiesSnel(safeId, opdrachtnr, locatie) {
+  const input = document.getElementById(`loc-invoer-${safeId}`);
+  if (input) input.value = locatie;
+  locOpslaanOpdracht(opdrachtnr, safeId);
+}
+
+async function locOpslaanOpdracht(opdrachtnr, safeId, event) {
+  event?.stopPropagation();
+  const input    = document.getElementById(`loc-invoer-${safeId}`);
+  const statusEl = document.getElementById(`loc-status-${safeId}`);
+  if (!input) return;
+  const nieuweLocatie = input.value.trim().toUpperCase();
+  if (!nieuweLocatie) { if (statusEl) statusEl.textContent = 'Vul een locatie in'; return; }
+  if (nieuweLocatie.length > MAGAZIJNLOCATIE_MAX_LENGTE) {
+    if (statusEl) statusEl.textContent = `Max. ${MAGAZIJNLOCATIE_MAX_LENGTE} tekens (AMF-limiet)`;
+    input.focus();
+    return;
+  }
+
+  const regels = state.reparaties.filter(r => r.opdrachtnr === opdrachtnr);
+  if (!regels.length) return;
+  const hoofd = regels.find(r => !isInstructieRegel(r)) || regels[0];
+
+  input.disabled = true;
+  if (statusEl) statusEl.textContent = 'Opslaan…';
+
+  try {
+    // Eén PATCH voor alle regels van deze opdracht — magazijnlocatie geldt
+    // op opdrachtniveau, niet per regel. Let op: dit veld staat NIET in
+    // BESCHERMDE_VELDEN (backend/sync.js) — een volgende ERP-sync kan deze
+    // waarde weer overschrijven (bewuste keuze: ERP blijft leidend). De
+    // logregel hieronder is de blijvende historie, ongeacht wat er later in
+    // reparaties.magazijnlocatie staat.
+    const { error } = await sb.from('reparaties').update({ magazijnlocatie: nieuweLocatie }).eq('opdrachtnr', opdrachtnr);
+    if (error) throw error;
+
+    // Eén logregel voor de hele wijziging (actie: locatie_wijziging_opdracht),
+    // niet per regel — zo is met 1 query op deze actie de volledige
+    // locatiehistorie van alle opdrachten te verwerken.
+    await insertLog({
+      reparatie_id:          hoofd.id,
+      monteur_id:            state.monteur.id,
+      monteur_naam:          state.monteur.naam,
+      actie:                 'locatie_wijziging_opdracht',
+      opdrachtnr:            hoofd.opdrachtnr,
+      regelnummer:           hoofd.regelnummer,
+      opdrachtcode:          hoofd.opdrachtcode || null,
+      artikelcode:           hoofd.artikelcode || null,
+      artikelomschrijving:   hoofd.artikelomschrijving || null,
+      serienummer:           hoofd.serienummer || null,
+      tagnummer:             hoofd.tagnummer || null,
+      opdrachtstatus:        hoofd.status || null,
+      nieuwe_opdrachtstatus: hoofd.status || null,
+      magazijnlocatie:       nieuweLocatie,
+    });
+
+    state.reparaties = state.reparaties.map(r =>
+      r.opdrachtnr === opdrachtnr ? { ...r, magazijnlocatie: nieuweLocatie } : r
+    );
+
+    toast(`✓ ${opdrachtnr} → ${nieuweLocatie}`);
+    renderLocOpdrachten();
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Fout: ' + e.message;
+    input.disabled = false;
+  }
+}
+
 let _locTag = null;
 let _locFlashTimer = null;
 
@@ -6357,7 +7162,7 @@ function switchTab(name) {
   // Zoekvelden legen bij het wisselen van tabblad — getypte zoektekst hoort
   // niet te blijven staan (en het filter actief te houden) als je naar een
   // ander tabblad gaat en later terugkomt.
-  const zoekVelden = ['af-open-zoek', 'af-beh-zoek', 'af-af-zoek', 'af-wg-zoek'];
+  const zoekVelden = ['af-open-zoek', 'af-beh-zoek', 'af-af-zoek', 'af-wg-zoek', 'af-loc-zoek'];
   let zoekGewist = false;
   zoekVelden.forEach(id => {
     const el = document.getElementById(id);
@@ -6376,7 +7181,7 @@ function switchTab(name) {
   if (fab) fab.style.display = (name === 'open') ? 'flex' : 'none';
   // Vul standaard filter UI wanneer instellingen worden geopend
   if (name === 'config' && state.reparaties?.length) vulStandaardFilterUI();
-  if (name === 'locatie') { locReset(); locLaadVandaagLog(); }
+  if (name === 'locatie') locSwitchMode('opdrachten'); // 'Opdrachten' is de standaardmodus bij het openen van de tab
   if (name === 'prep')    prepLaad();
 }
 
@@ -6388,7 +7193,7 @@ function renderOnderdelen() {
 
   const groepen = {};
   state.reparaties
-    .filter(r => r.status === '480' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && (x.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(x)))
+    .filter(r => r.status === '455' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && (x.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(x)))
     .forEach(r => {
       if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
       groepen[r.opdrachtnr].push(r);
@@ -6425,21 +7230,21 @@ async function zetWachtOpOnderdelen() {
   closeModal('modal-detail');
   closeModal('modal-start');
   if (state.demoMode) {
-    r.status = '480';
+    r.status = '455';
     renderLists();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
     return;
   }
   try {
-    await updateReparatieStatus(r.id, { status: '480' });
-    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '480' });
+    await updateReparatieStatus(r.id, { status: '455' });
+    await insertLog({ reparatie_id: r.id, monteur_id: state.monteur.id, monteur_naam: state.monteur.naam, actie: 'wacht_onderdelen', opdrachtnr: r.opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: '455' });
     await laadReparaties();
     toast('📦 ' + r.opdrachtnr + ' wacht op onderdelen');
   } catch(e) { toast('Fout: ' + e.message); }
 }
 
 async function zetVoorraadBeschikbaar(opdrachtnr) {
-  const regels = state.reparaties.filter(r => r.opdrachtnr === opdrachtnr && r.status === '480');
+  const regels = state.reparaties.filter(r => r.opdrachtnr === opdrachtnr && r.status === '455');
   if (!regels.length) return;
   if (state.demoMode) {
     regels.forEach(r => { r.status = '445'; r.monteur_id = null; r.monteurs = null; });

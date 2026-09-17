@@ -7,6 +7,15 @@
  *   MSSQL_ENCRYPT       (default: false — zet op 'true' voor Azure SQL)
  *   MSSQL_VIEW          (default: JVDV_Service_Bruingoed_Werkplaats_App)
  *   SYNC_INTERVAL_MS    (default: 300000 = 5 minuten)
+ *
+ *   AMF_PUSH_URL    (bv. https://apitest.strijbosch.nl/werkplaats_reparatie
+ *                        — de testomgeving, NIET automatisch de live URL)
+ *   (hergebruikt STRIJBOSCH_API_KEY van de bestaande pull-koppeling)
+ *
+ * Zie ook: pushNaarAmf() onderaan dit bestand — stuurt reparatie_logs
+ * door naar de AMF-staging-tabel. Bewust NIET aangesloten op een
+ * automatische interval; handmatig aanroepen totdat dit getest en akkoord
+ * bevonden is. Zie internal-docs/architectuur-en-audit.md §11.
  */
 
 require('dotenv').config();
@@ -185,14 +194,24 @@ async function syncReparaties(pool) {
       gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
       const [bestaand] = await db.query(
-        'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+        'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
         [rij.opdrachtnr, rij.regelnummer ?? 1]
       );
 
       if (bestaand.length > 0) {
-        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden
+        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden —
+        // BEHALVE 'status' zolang een regel nog volledig onaangeroerd is
+        // (nog niet geclaimd/in behandeling/afgerond). Tot dat moment is
+        // 'status' nog geen door de app beheerd veld maar simpelweg de
+        // meest recente ERP-status, en moet 'ie — net als bij het aanmaken
+        // — blijven meebewegen met opdrachtstatus. Zodra een monteur de
+        // regel claimt, bevriest 'status' zoals gebruikelijk.
+        const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+        const teBeschermen = nogOnaangeroerd
+          ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+          : BESCHERMDE_VELDEN;
         const updateRij = Object.fromEntries(
-          Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+          Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
         );
         const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
         if (setCols) {
@@ -338,13 +357,20 @@ async function syncVanApi() {
         gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
         const [bestaand] = await db.query(
-          'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+          'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
           [rij.opdrachtnr, rij.regelnummer ?? 1]
         );
 
         if (bestaand.length > 0) {
+          // Zie de uitleg bij dezelfde constructie in syncReparaties()
+          // hierboven: 'status' blijft meebewegen met opdrachtstatus zolang
+          // een regel nog niet door een monteur is aangeraakt.
+          const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+          const teBeschermen = nogOnaangeroerd
+            ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+            : BESCHERMDE_VELDEN;
           const updateRij = Object.fromEntries(
-            Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+            Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
           );
           const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
           if (setCols) {
@@ -386,4 +412,178 @@ function startApiSync() {
   setInterval(syncVanApi, API_SYNC_MS);
 }
 
-module.exports = { startSync, eenSync, syncVanApi };
+// ── Push naar AMF werkplaats_reparatie-staging ──────────────────────────
+// Bewust een apart stuk, losstaand van de pull-sync hierboven, en NIET
+// aangesloten op een automatische interval (zie startSync()) — pas dat pas
+// aan zodra dit getest en akkoord bevonden is. Getest via handmatige
+// Postman-/curl-aanroepen op apitest.strijbosch.nl, zie
+// internal-docs/architectuur-en-audit.md §11 voor de bevindingen.
+
+const AMF_PUSH_URL = process.env.AMF_PUSH_URL || '';
+const AMF_API_KEY  = process.env.STRIJBOSCH_API_KEY || ''; // zelfde sleutel als de pull-koppeling
+
+// Onze eigen reparatie_logs.actie → de tekst die AMF verwacht. Puur onze
+// eigen keuze (AMF legt hier geen vaste waarden voor op) — nieuwe acties
+// hier toevoegen zodra dat nodig blijkt.
+const ACTIE_MAPPING = {
+  start:                     'REPARATIE_GECLAIMD',
+  vrijgegeven:               'REPARATIE_VRIJGEGEVEN',
+  afgerond:                  'REPARATIE_AFGEROND',
+  wacht_onderdelen:          'REPARATIE_WACHT_ONDERDELEN',
+  voorraad_beschikbaar:      'REPARATIE_VOORRAAD_BESCHIKBAAR',
+  locatie_wijziging_opdracht:'REPARATIE_LOCATIE_GEWIJZIGD',
+  // HUUR/RUIL-magazijnvraag (frontend/app.js, _insertTagnrScans()) — alleen
+  // de gerepareerd-stroom krijgt een eigen losse reparatie_logs-rij per
+  // GM-tagnummer; de voorraad-stroom (en NW) niet, zie _insertTagnrScans().
+  gm_reparatie:              'REPARATIE_GM_GEREPAREERD',
+};
+
+// MySQL DATE ('2026-08-21') → YYYYMMDD, zoals AMF UITERSTE_DATUM_AFDELING verwacht.
+function naarYyyymmdd(v) {
+  if (!v) return null;
+  return String(v).slice(0, 10).replace(/-/g, '');
+}
+
+// MySQL DATETIME ('2026-08-18 13:30:00') → ISO met 'T' ('2026-08-18T13:30:00').
+function naarIsoDatumtijd(v) {
+  if (!v) return null;
+  return String(v).slice(0, 19).replace(' ', 'T');
+}
+
+// Eén reparatie_logs-rij → AMF-payload. Statuscodes (415-520) worden
+// onvertaald doorgestuurd — bevestigd dat onze eigen codes (445/465/480/519)
+// daarbinnen vallen, dus geen aparte vertaaltabel nodig.
+// LET OP (2026-09-03): 470/500 (levering) en 370 (afgekeurd bij afronden,
+// zie afrondReparatie() in frontend/app.js) zijn nieuwe eigen codes die
+// niet meer binnen dat bevestigde 415-520-bereik vallen. Nog niet
+// opnieuw tegen apitest.strijbosch.nl getest — eerst doen zodra
+// AMF_PUSH_URL weer gebruikt gaat worden (zie §11.3 van
+// internal-docs/architectuur-en-audit.md voor de eerdere testresultaten).
+function bouwAmfPayload(log) {
+  return {
+    REPARATIE_ID:            log.id,
+    OPDRACHTNR:               log.opdrachtnr,
+    // AMF vereist een geheel getal (geen NULL) — bevestigd via test (500-fout
+    // bij null, 200 bij fallback). Zelfde `?? 1`-conventie als elders in de
+    // codebase waar regelnummer kan ontbreken.
+    REGELNUMMER:              log.regelnummer ?? 1,
+    OPDRACHTCODE:             log.opdrachtcode,
+    ARTIKELCODE:              log.artikelcode,
+    ARTIKELOMSCHRIJVING:      log.artikelomschrijving,
+    SERIENUMMER:              log.serienummer,
+    TAGNUMMER:                log.tagnummer,
+    // Zelfde soort verplichting als REGELNUMMER — bevestigd via test.
+    AANTAL:                   log.aantal ?? 0,
+    ACTIE:                    ACTIE_MAPPING[log.actie] || null,
+    OPDRACHTSTATUS:           log.opdrachtstatus        != null ? parseInt(log.opdrachtstatus, 10)        : null,
+    NIEUWE_OPDRACHTSTATUS:    log.nieuwe_opdrachtstatus  != null ? parseInt(log.nieuwe_opdrachtstatus, 10) : null,
+    DIAGNOSE:                 log.diagnose,
+    WERKZAAMHEDEN:            log.werkzaamheden,
+    UITKOMST:                 log.uitkomst ? log.uitkomst.toUpperCase() : null,
+    GEBRUIKTE_ONDERDELEN:     log.gebruikte_onderdelen,
+    // Zelfde soort verplichting als REGELNUMMER/AANTAL — bevestigd via test.
+    BESTEDE_TIJD_MINUTEN:     log.bestede_tijd_minuten ?? 0,
+    MAGAZIJNLOCATIE:          log.magazijnlocatie,
+    UITERSTE_DATUM_AFDELING:  naarYyyymmdd(log.uiterste_datum_afdeling),
+    MONTEUR_ID:               log.monteur_id,
+    MONTEUR_NAAM:             log.monteur_naam,
+    DATUMTIJD:                naarIsoDatumtijd(log.aangemaakt_op),
+  };
+}
+
+// Stuurt reparatie_logs-regels die nog niet eerder verstuurd zijn door naar
+// AMF. Gebruikt staging_push_status.laatste_verzonden_log_id als
+// voortgangsmarkering, en schuift die alleen op ná een geslaagde POST — een
+// mislukte regel wordt bij de eerstvolgende aanroep opnieuw geprobeerd, en
+// de rest van die batch wordt dan bewust niet verder afgehandeld (voorkomt
+// dat een structureel probleem in stilte een gat in de volgorde slaat).
+//
+// pushNaarAmf() wordt vanuit api.js fire-and-forget (niet ge-await't)
+// aangeroepen bij elke nieuwe reparatie_logs-rij. Zonder lock lezen twee
+// bijna-gelijktijdige aanroepen dezelfde laatste_verzonden_log_id vóórdat
+// de eerste 'm heeft bijgewerkt, en posten ze dezelfde regel(s) allebei
+// naar AMF — vandaar de dubbele rijen. pushNaarAmfEens() bevat de
+// oorspronkelijke logica; pushNaarAmf() eromheen zorgt dat er nooit twee
+// runs tegelijk actief zijn en herhaalt de run als er tijdens een lopende
+// run een nieuwe trigger binnenkwam (anders zou die trigger's werk
+// stilzwijgend genegeerd worden).
+let amfPushBezig  = null;
+let amfPushOpnieuw = false;
+
+async function pushNaarAmf() {
+  if (amfPushBezig) {
+    amfPushOpnieuw = true;
+    return amfPushBezig;
+  }
+  amfPushBezig = (async () => {
+    do {
+      amfPushOpnieuw = false;
+      await pushNaarAmfEens();
+    } while (amfPushOpnieuw);
+  })().finally(() => { amfPushBezig = null; });
+  return amfPushBezig;
+}
+
+async function pushNaarAmfEens() {
+  if (!AMF_PUSH_URL || !AMF_API_KEY) {
+    console.warn('[PUSH] AMF_PUSH_URL of STRIJBOSCH_API_KEY niet ingesteld — push overgeslagen.');
+    return;
+  }
+
+  const [statusRijen] = await db.query(
+    'SELECT id, laatste_verzonden_log_id FROM staging_push_status ORDER BY id LIMIT 1'
+  );
+  if (statusRijen.length === 0) {
+    console.error('[PUSH] Geen rij in staging_push_status — kan niet bepalen wat al verstuurd is.');
+    return;
+  }
+  const statusId = statusRijen[0].id;
+  let laatsteId  = statusRijen[0].laatste_verzonden_log_id || 0;
+
+  const acties = Object.keys(ACTIE_MAPPING);
+  const [logs] = await db.query(
+    `SELECT * FROM reparatie_logs WHERE id > ? AND actie IN (${acties.map(() => '?').join(',')}) ORDER BY id ASC`,
+    [laatsteId, ...acties]
+  );
+
+  if (logs.length === 0) {
+    console.log('[PUSH] Niets nieuws te versturen.');
+    return;
+  }
+
+  console.log(`[PUSH] ${logs.length} nieuwe regel(s) te versturen naar AMF.`);
+  let verstuurd = 0, fouten = 0;
+
+  for (const log of logs) {
+    try {
+      const payload = bouwAmfPayload(log);
+      const res = await fetch(`${AMF_PUSH_URL}?apikey=${AMF_API_KEY}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        console.error(`[PUSH] Regel ${log.id} geweigerd (HTTP ${res.status}):`, body?.errorMessage || body);
+        fouten++;
+        break;
+      }
+
+      laatsteId = log.id;
+      await db.query(
+        'UPDATE staging_push_status SET laatste_verzonden_log_id = ?, bijgewerkt_op = NOW() WHERE id = ?',
+        [laatsteId, statusId]
+      );
+      verstuurd++;
+    } catch (err) {
+      console.error(`[PUSH] Fout bij regel ${log.id}:`, err.message);
+      fouten++;
+      break;
+    }
+  }
+
+  console.log(`[PUSH] Klaar: ${verstuurd} verstuurd, ${fouten} fout(en).`);
+}
+
+module.exports = { startSync, eenSync, syncVanApi, pushNaarAmf, bouwAmfPayload };
