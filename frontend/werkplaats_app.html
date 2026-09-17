@@ -94,7 +94,7 @@
     </div>
     <div class="tab" onclick="switchTab('locatie')" id="tab-locatie" style="display:none">
       Locatie
-      <span class="tab-count">―</span>
+      <span class="tab-count" id="count-loc">―</span>
     </div>
     <div class="tab" onclick="switchTab('prep')" id="tab-prep" style="display:none">
       Apparaat koppelen
@@ -232,50 +232,77 @@
 
     <!-- Locatie aanpassen -->
     <div class="view" id="view-locatie">
-      <div style="padding:16px;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px">
 
-        <!-- Flash feedback (succes of fout) -->
-        <div class="loc-flash" id="loc-flash" style="display:none"></div>
-
-        <!-- Stap 1 -->
-        <div class="loc-stap-kaart" id="loc-stap1-kaart">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <div class="loc-stap-nr actief" id="loc-nr1">1</div>
-            <div>
-              <div style="font-size:14px;font-weight:600">Scan tagnummer</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de barcode of QR van het item</div>
-            </div>
-          </div>
-          <input class="loc-scan-input" id="loc-tag-input" type="text"
-            placeholder="Scan of typ tagnummer…"
-            onkeydown="if(event.key==='Enter')locTagGescand()"
-            autocomplete="off" autocorrect="off" spellcheck="false">
-          <div class="loc-tag-badge" id="loc-tag-badge" style="display:none"></div>
-        </div>
-
-        <!-- Stap 2 -->
-        <div class="loc-stap-kaart" id="loc-stap2-kaart" style="opacity:.45">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <div class="loc-stap-nr" id="loc-nr2">2</div>
-            <div>
-              <div style="font-size:14px;font-weight:600">Scan locatie</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de locatiecode</div>
-            </div>
-          </div>
-          <input class="loc-scan-input" id="loc-loc-input" type="text"
-            placeholder="Scan of typ locatie…"
-            onkeydown="if(event.key==='Enter')locLocGescand()"
-            autocomplete="off" autocorrect="off" spellcheck="false"
-            disabled>
-        </div>
-
-        <!-- Log -->
-        <div id="loc-log-wrap" style="display:none">
-          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Recente scans</div>
-          <div id="loc-log-lijst"></div>
-        </div>
-
+      <!-- Modus-toggle: Opdrachten (standaard) vs. Tagnummer (legacy) -->
+      <div class="loc-mode-toggle">
+        <button type="button" class="loc-mode-btn actief" id="loc-mode-opdrachten" onclick="locSwitchMode('opdrachten')">Opdrachten</button>
+        <button type="button" class="loc-mode-btn" id="loc-mode-tagnummer" onclick="locSwitchMode('tagnummer')">Tagnummer</button>
       </div>
+
+      <!-- Opdrachten: magazijnlocatie zetten op orders uit reparaties (standaard) -->
+      <div id="loc-opdrachten-wrap">
+        <div class="app-filter-bar">
+          <input class="app-filter-zoek" id="af-loc-zoek" type="text" placeholder="Opdrachtnr…" oninput="renderLists()">
+          <div class="ms-wrap" id="ms-loc-opdrachtcode"><button class="ms-btn" data-label="Opdrachtcode" onclick="toggleMs('ms-loc-opdrachtcode')">Opdrachtcode</button><div class="ms-panel" data-wrap="ms-loc-opdrachtcode"></div></div>
+          <div class="ms-wrap" id="ms-loc-opdrachtstatus"><button class="ms-btn" data-label="Status" onclick="toggleMs('ms-loc-opdrachtstatus')">Status</button><div class="ms-panel" data-wrap="ms-loc-opdrachtstatus"></div></div>
+          <div class="ms-wrap" id="ms-loc-landcode"><button class="ms-btn" data-label="Landcode" onclick="toggleMs('ms-loc-landcode')">Landcode</button><div class="ms-panel" data-wrap="ms-loc-landcode"></div></div>
+          <div class="ms-wrap" id="ms-loc-handeling"><button class="ms-btn" data-label="Handeling" onclick="toggleMs('ms-loc-handeling')">Handeling</button><div class="ms-panel" data-wrap="ms-loc-handeling"></div></div>
+          <div class="ms-wrap" id="ms-loc-organisatie"><button class="ms-btn" data-label="Organisatie" onclick="toggleMs('ms-loc-organisatie')">Organisatie</button><div class="ms-panel" data-wrap="ms-loc-organisatie"></div></div>
+          <div class="ms-wrap" id="ms-loc-werkplaats"><button class="ms-btn" data-label="Werkplaats" onclick="toggleMs('ms-loc-werkplaats')">Werkplaats</button><div class="ms-panel" data-wrap="ms-loc-werkplaats"></div></div>
+          <div class="ms-wrap" id="ms-loc-reden-datum"><button class="ms-btn" data-label="Reden datum" onclick="toggleMs('ms-loc-reden-datum')">Reden datum</button><div class="ms-panel" data-wrap="ms-loc-reden-datum"></div></div>
+          <button class="app-filter-reset" id="af-loc-reset" onclick="resetAppFilter('loc')">Wis</button>
+        </div>
+        <div class="card-list" id="list-loc-opdrachten"></div>
+      </div>
+
+      <!-- Tagnummer: bestaande scan-tag-naar-locatie-flow (legacy, niet meer standaard) -->
+      <div id="loc-tagnummer-wrap" style="display:none">
+        <div style="padding:16px;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px">
+
+          <!-- Flash feedback (succes of fout) -->
+          <div class="loc-flash" id="loc-flash" style="display:none"></div>
+
+          <!-- Stap 1 -->
+          <div class="loc-stap-kaart" id="loc-stap1-kaart">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="loc-stap-nr actief" id="loc-nr1">1</div>
+              <div>
+                <div style="font-size:14px;font-weight:600">Scan tagnummer</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de barcode of QR van het item</div>
+              </div>
+            </div>
+            <input class="loc-scan-input" id="loc-tag-input" type="text"
+              placeholder="Scan of typ tagnummer…"
+              onkeydown="if(event.key==='Enter')locTagGescand()"
+              autocomplete="off" autocorrect="off" spellcheck="false">
+            <div class="loc-tag-badge" id="loc-tag-badge" style="display:none"></div>
+          </div>
+
+          <!-- Stap 2 -->
+          <div class="loc-stap-kaart" id="loc-stap2-kaart" style="opacity:.45">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="loc-stap-nr" id="loc-nr2">2</div>
+              <div>
+                <div style="font-size:14px;font-weight:600">Scan locatie</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px">Scan de locatiecode</div>
+              </div>
+            </div>
+            <input class="loc-scan-input" id="loc-loc-input" type="text"
+              placeholder="Scan of typ locatie…"
+              onkeydown="if(event.key==='Enter')locLocGescand()"
+              autocomplete="off" autocorrect="off" spellcheck="false"
+              disabled>
+          </div>
+
+          <!-- Log -->
+          <div id="loc-log-wrap" style="display:none">
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Recente scans</div>
+            <div id="loc-log-lijst"></div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
 
     <!-- Config -->
@@ -494,15 +521,30 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Bestede tijd</label>
+      <!-- Reparatietijd (som van gerepareerde GM-apparaten) alleen zichtbaar
+           als die er is — dan heet het veld hieronder 'Overige tijd' i.p.v.
+           'Bestede tijd', en verschijnt de totaaltelling eronder. Zo lopen
+           reparatietijd en opdrachttijd nooit door elkaar. -->
+      <div id="ma-reparatietijd-rij" style="display:none;margin-bottom:12px">
+        <label class="form-label">Reparatietijd (som)</label>
+        <div class="tijd-row">
+          <input type="number" class="form-input tijd-input" id="ma-reparatietijd-waarde" value="0" readonly>
+          <span class="tijd-label-sm">min</span>
+        </div>
+      </div>
+      <label class="form-label" id="ma-tijd-label">Bestede tijd</label>
       <div class="tijd-row">
         <input type="number" class="form-input tijd-input" id="ma-uren" placeholder="0" min="0" max="99"
-          oninput="controleerUren(this)" onblur="controleerUren(this)">
+          oninput="controleerUren(this);herberekenMaTotaalTijd()" onblur="controleerUren(this)">
         <span class="tijd-label-sm">uur</span>
-        <input type="number" class="form-input tijd-input" id="ma-minuten" placeholder="0" min="0" max="59">
+        <input type="number" class="form-input tijd-input" id="ma-minuten" placeholder="0" min="0" max="59"
+          oninput="herberekenMaTotaalTijd()">
         <span class="tijd-label-sm">min</span>
       </div>
       <div class="uren-waarschuwing" id="ma-uren-waarschuwing">⚠ Grote hoeveelheid tijd geselecteerd</div>
+      <div id="ma-totaaltijd-rij" style="display:none;font-size:13px;color:var(--text);margin-top:8px">
+        Totale tijd voor deze opdracht: <strong id="ma-totaaltijd-waarde">0m</strong>
+      </div>
     </div>
 
     <hr class="modal-divider">
@@ -739,7 +781,7 @@
       </div>
       <div id="tagnr-error" style="color:var(--danger);font-size:12px;margin-top:5px;display:none"></div>
     </div>
-    <div style="padding:4px 0 0">
+    <div id="tagnr-reeks-toggle-wrap" style="padding:4px 0 0">
       <button type="button" onclick="toggleTagnrReeks()" style="font-size:12px;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px 0;text-decoration:underline">Reeks invoeren (van t/m)</button>
       <div id="tagnr-reeks-paneel" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-top:6px">
         <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Reeks invoeren</div>
@@ -758,6 +800,94 @@
     <button class="btn btn-ghost" id="tagnr-vorige-btn" style="width:auto;flex-shrink:0;display:none" onclick="vorigeTagnrRegel()">← Vorige</button>
     <div id="tagnr-tel" style="font-size:12px;color:var(--muted);flex:1;text-align:center">0 van ? ingevoerd</div>
     <button class="btn btn-primary" id="tagnr-volgende-btn" style="width:auto;flex-shrink:0" onclick="bevestigTagnrRegel()">Volgende →</button>
+  </div>
+</div>
+
+<!-- ── MAGAZIJN-HERKOMST SCHERM (GM/NW, alleen HUUR/RUIL) ──── -->
+<div id="scherm-magazijn-vraag">
+  <div class="vragen-header">
+    <div>
+      <div class="vragen-header-title">Uit welk magazijn is dit gepakt?</div>
+      <div class="vragen-header-sub" id="mv-artikel-label">—</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div id="mv-voortgang" style="font-size:11px;color:var(--muted);font-family:var(--mono)">—</div>
+      <button type="button" onclick="annuleerTagnrScherm()" title="Annuleren"
+        style="background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:0 2px">×</button>
+    </div>
+  </div>
+  <div class="vragen-body">
+    <div class="vraag-card">
+      <div class="vraag-tekst">Vul het aantal per magazijn in — begint op 0 om fouten te voorkomen</div>
+      <div class="vg-aantal-rij">
+        <span class="vg-aantal-label">GM</span>
+        <div class="vg-stepper">
+          <button type="button" onclick="magazijnAantalStap('gm',-1)">−</button>
+          <input type="number" id="mv-gm-aantal" min="0" value="0" oninput="magazijnVraagWijziging()">
+          <button type="button" onclick="magazijnAantalStap('gm',1)">+</button>
+          <button type="button" class="vg-max-btn" onclick="magazijnAantalMax('gm')">Max</button>
+        </div>
+      </div>
+      <div class="vg-aantal-rij">
+        <span class="vg-aantal-label">NW</span>
+        <div class="vg-stepper">
+          <button type="button" onclick="magazijnAantalStap('nw',-1)">−</button>
+          <input type="number" id="mv-nw-aantal" min="0" value="0" oninput="magazijnVraagWijziging()">
+          <button type="button" onclick="magazijnAantalStap('nw',1)">+</button>
+          <button type="button" class="vg-max-btn" onclick="magazijnAantalMax('nw')">Max</button>
+        </div>
+      </div>
+      <div id="mv-waarschuwing" style="color:var(--danger);font-size:12px;margin-top:8px;display:none"></div>
+      <div id="mv-error" style="color:var(--danger);font-size:12px;margin-top:5px;display:none"></div>
+    </div>
+  </div>
+  <div class="vragen-footer" style="display:flex;align-items:center;gap:10px">
+    <button class="btn btn-ghost" id="mv-vorige-btn" style="width:auto;flex-shrink:0;display:none" onclick="vorigeMagazijnVraag()">← Vorige</button>
+    <button class="btn btn-primary" style="flex:1" onclick="bevestigMagazijnVraag()">Volgende →</button>
+  </div>
+</div>
+
+<!-- ── VOORRAAD/GEREPAREERD SCHERM (alleen bij GM) ─────────── -->
+<div id="scherm-vg-vraag">
+  <div class="vragen-header">
+    <div>
+      <div class="vragen-header-title">Hoeveel zijn er gerepareerd?</div>
+      <div class="vragen-header-sub" id="vg-artikel-label">—</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div id="vg-voortgang" style="font-size:11px;color:var(--muted);font-family:var(--mono)">—</div>
+      <button type="button" onclick="annuleerTagnrScherm()" title="Annuleren"
+        style="background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:0 2px">×</button>
+    </div>
+  </div>
+  <div class="vragen-body">
+    <div class="vraag-card">
+      <div class="vraag-tekst">Vul het aantal per soort in — begint op 0 om fouten te voorkomen</div>
+      <div class="vg-aantal-rij">
+        <span class="vg-aantal-label">Gerepareerd</span>
+        <div class="vg-stepper">
+          <button type="button" onclick="vgAantalStap('gerepareerd',-1)">−</button>
+          <input type="number" id="vg-gerepareerd-aantal" min="0" value="0" oninput="vgAantalWijziging()">
+          <button type="button" onclick="vgAantalStap('gerepareerd',1)">+</button>
+          <button type="button" class="vg-max-btn" onclick="vgAantalMax('gerepareerd')">Max</button>
+        </div>
+      </div>
+      <div class="vg-aantal-rij">
+        <span class="vg-aantal-label">Voorraad</span>
+        <div class="vg-stepper">
+          <button type="button" onclick="vgAantalStap('voorraad',-1)">−</button>
+          <input type="number" id="vg-voorraad-aantal" min="0" value="0" oninput="vgAantalWijziging()">
+          <button type="button" onclick="vgAantalStap('voorraad',1)">+</button>
+          <button type="button" class="vg-max-btn" onclick="vgAantalMax('voorraad')">Max</button>
+        </div>
+      </div>
+      <div id="vg-waarschuwing" style="color:var(--danger);font-size:12px;margin-top:8px;display:none"></div>
+      <div id="vg-error" style="color:var(--danger);font-size:12px;margin-top:5px;display:none"></div>
+    </div>
+  </div>
+  <div class="vragen-footer" style="display:flex;align-items:center;gap:10px">
+    <button class="btn btn-ghost" style="width:auto;flex-shrink:0" onclick="vorigeVoorraadGerepareerdVraag()">← Vorige</button>
+    <button class="btn btn-primary" style="flex:1" onclick="bevestigVoorraadGerepareerdVraag()">Volgende →</button>
   </div>
 </div>
 

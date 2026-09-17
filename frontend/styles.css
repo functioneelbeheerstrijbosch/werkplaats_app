@@ -288,6 +288,23 @@
   }
 
   /* ── LOCATIE MODULE ─────────────────────────────────────────── */
+  .loc-mode-toggle {
+    display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .loc-mode-btn {
+    flex: 1; padding: 8px 12px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--bg3); color: var(--muted); font-family: var(--font); font-size: 13px;
+    font-weight: 600; cursor: pointer;
+  }
+  .loc-mode-btn.actief { background: #004582; border-color: #004582; color: #fff; }
+  .loc-snel-rij { display: flex; flex-wrap: wrap; gap: 6px; }
+  .loc-snel-chip {
+    font-size: 12px; font-family: var(--font); font-weight: 500;
+    padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text); cursor: pointer;
+  }
+  .loc-snel-chip:active { opacity: .75; }
+
   .loc-stap-kaart {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 10px; padding: 18px 16px;
@@ -719,6 +736,7 @@
     color: var(--danger);
     font-weight: 700;
   }
+  .tijd-input[readonly] { background: var(--bg2); color: var(--muted); cursor: default; }
   .tijd-label-sm { font-size: 13px; color: var(--muted); }
   .uren-waarschuwing {
     font-size: 11px; color: var(--danger); font-weight: 600;
@@ -975,6 +993,48 @@
   .tagnr-rij-nr { font-size: 11px; color: var(--muted); font-family: var(--mono); width: 18px; flex-shrink: 0; }
   .tagnr-rij-waarde { font-family: var(--mono); font-size: 14px; font-weight: 600; flex: 1; letter-spacing: .04em; }
   .tagnr-rij-del { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px; padding: 0 2px; flex-shrink: 0; }
+
+  /* Eén tagnummer + zijn eigen reparatie-kaartje (alleen gm_gerepareerd-
+     stroom), visueel bij elkaar gehouden zodat het bij meerdere gerepareerde
+     tags in dezelfde regel niet allemaal in elkaar overloopt. */
+  .tagnr-rij-wrap { margin-bottom: 10px; }
+  .tagnr-rij-wrap .tagnr-rij { margin-bottom: 0; }
+  .tagnr-reparatie-kaart {
+    margin: 8px 0 0 26px; padding: 12px;
+    background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid var(--primary);
+    border-radius: var(--r);
+  }
+
+  /* ── MAGAZIJN-HERKOMST SCHERM ──────────────────────────────── */
+  #scherm-magazijn-vraag {
+    position: fixed; inset: 0; z-index: 401;
+    background: var(--bg); display: none; flex-direction: column;
+  }
+  #scherm-magazijn-vraag.open { display: flex; }
+
+  /* ── VOORRAAD/GEREPAREERD SCHERM ───────────────────────────── */
+  #scherm-vg-vraag {
+    position: fixed; inset: 0; z-index: 401;
+    background: var(--bg); display: none; flex-direction: column;
+  }
+  #scherm-vg-vraag.open { display: flex; }
+  .vg-aantal-rij { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
+  .vg-aantal-label { font-size: 14px; color: var(--text); font-weight: 600; }
+  .vg-stepper { display: flex; align-items: center; gap: 6px; }
+  .vg-stepper button {
+    width: 34px; height: 34px; flex-shrink: 0;
+    border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .vg-stepper input {
+    width: 56px; text-align: center; font-family: var(--mono); font-size: 15px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text); padding: 8px 4px;
+  }
+  .vg-stepper input:focus { outline: none; border-color: var(--accent); }
+  .vg-max-btn {
+    width: auto !important; padding: 0 10px; font-size: 12px !important; font-weight: 600;
+  }
 
   /* ── VRAGENLIJST SCHERM ────────────────────────────────────── */
   #scherm-witgoed-claim {
