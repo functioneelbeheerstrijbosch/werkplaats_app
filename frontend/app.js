@@ -1005,9 +1005,9 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Feature-toggle: "+ Regel toevoegen" (openRegelModal) tijdelijk uit op
-// verzoek — op true zetten om 'm weer aan te zetten.
-const REGEL_TOEVOEGEN_AAN = false;
+// Feature-toggle: "+ Regel toevoegen" (openRegelModal) — op verzoek (2026-09-18)
+// weer aangezet. Op false zetten om 'm weer uit te schakelen.
+const REGEL_TOEVOEGEN_AAN = true;
 
 function groepCardHTML(regels, mijnId, modus, logs) {
   // modus = 'open' | 'behandeling'
