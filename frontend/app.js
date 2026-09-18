@@ -4119,11 +4119,23 @@ let _tagnrVoorraadGerepareerd = new Map();
 // _tagnrGescand voor diezelfde key: { diagnose, werkzaamheden, uren, minuten, onderdelen }
 let _tagnrGescandMeta = new Map();
 
-// Tagnummer(s) verplicht als tagnrscannenjn='J' staat, óf (ongeacht die vlag)
-// bij opdrachtcode HUUR/RUIL voor J-regels met een aantal groter dan 0.
+// Tijdelijk uit op verzoek (2026-09-18): verplichte tagnummer-scan voor
+// HUUR/RUIL (en daarmee ook de GM/NW-magazijnvraag, voorraad/gerepareerd-
+// splitsing en de reparatietijd-uitsplitsing bij afronden — die schermen
+// worden alleen bereikt via deze tagnr-scan-queue) komt terug zodra dat
+// gefilterd kan worden per productgroep. Tot die tijd bepaalt alleen
+// tagnrscannenjn='J' nog of tagnummer verplicht is, ongeacht opdrachtcode
+// (zelfde gedrag als vóór commit d94950f). Op true zetten (en de
+// productgroep-filter toevoegen) om dit weer aan te zetten.
+const TAGNR_VERPLICHT_HUUR_RUIL_ACTIEF = false;
+
+// Tagnummer(s) verplicht als tagnrscannenjn='J' staat, óf (ongeacht die vlag,
+// en alleen als TAGNR_VERPLICHT_HUUR_RUIL_ACTIEF) bij opdrachtcode HUUR/RUIL
+// voor J-regels met een aantal groter dan 0.
 function vereistTagnummer(r) {
   if (!r) return false;
   if ((r.tagnrscannenjn || '').toUpperCase() === 'J') return true;
+  if (!TAGNR_VERPLICHT_HUUR_RUIL_ACTIEF) return false;
   const code = (r.opdrachtcode || '').toUpperCase();
   return (code === 'HUUR' || code === 'RUIL')
     && (r.doorsluizenjn || '').toUpperCase() === 'J'
