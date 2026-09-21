@@ -576,21 +576,21 @@ function renderLists() {
   const behandeling = state.reparaties.filter(r =>
     !isRegelAfgerond(r) && r.monteur_id === mijnId &&
     r.status !== '455' &&
-    (r.status === statusInBehandeling(r) || (r.doorsluizenjn || '').toUpperCase() === 'J')
+    (r.status === statusInBehandeling(r) || isWerkRegel(r))
   );
 
   // Afgerond: op basis van reparatie_logs (blijft staan ook als status wordt gereset)
   const afgerondLogs = state.afgerondLogs || [];
 
-  // Orders zonder minimaal 1 J-regel worden nergens getoond
+  // Orders zonder minimaal 1 werkregel (J, of 99-BASIS service-regel) worden nergens getoond
   const geldigeOpdrachten = new Set(
     state.reparaties
-      .filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(r))
+      .filter(r => isWerkRegel(r) && !isInstructieRegel(r))
       .map(r => r.opdrachtnr)
   );
 
   // Open werkplaats: groepeer per opdrachtnr
-  // Claimbaar = doorsluizenjn = 'J', niet instructieregel
+  // Claimbaar = werkregel (doorsluizenjn = 'J', of 99-BASIS service-regel), niet instructieregel
   const claimbare = new Set(
     state.reparaties
       .filter(r => {
@@ -603,11 +603,11 @@ function renderLists() {
         // Bewust ruim: een order met bv. status 487 moet gewoon zichtbaar
         // blijven (alleen de Claim-knop zelf wordt grijs/niet-klikbaar via
         // magClaimen(), zie renderLijst() modus 'open'). Daarom hier geen
-        // statusbeperking — elke openstaande, niet-afgeronde J-regel telt.
-        if ((r.status === statusOpen(r) || r.status === '450') && (r.doorsluizenjn || '').toUpperCase() === 'J') return true;
-        // J-regels zonder artikelcode zijn ook claimbaar ongeacht de ERP-status,
+        // statusbeperking — elke openstaande, niet-afgeronde werkregel telt.
+        if ((r.status === statusOpen(r) || r.status === '450') && isWerkRegel(r)) return true;
+        // Werkregels zonder artikelcode zijn ook claimbaar ongeacht de ERP-status,
         // zolang ze vrij zijn (geen monteur) en niet afgerond.
-        if ((r.doorsluizenjn || '').toUpperCase() === 'J' && !r.monteur_id) return true;
+        if (isWerkRegel(r) && !r.monteur_id) return true;
         return false;
       })
       .map(r => r.opdrachtnr)
@@ -639,8 +639,8 @@ function renderLists() {
 
   const alleGroepen = Object.values(groepen).sort((a, b) => {
     // Gedeeltelijk geclaimd (alle J-regels bezet) naar onder
-    const aGeclaimd = a.filter(r => (r.doorsluizenjn||'').toUpperCase()==='J').every(r => r.monteur_id && r.monteur_id !== mijnId);
-    const bGeclaimd = b.filter(r => (r.doorsluizenjn||'').toUpperCase()==='J').every(r => r.monteur_id && r.monteur_id !== mijnId);
+    const aGeclaimd = a.filter(r => isWerkRegel(r)).every(r => r.monteur_id && r.monteur_id !== mijnId);
+    const bGeclaimd = b.filter(r => isWerkRegel(r)).every(r => r.monteur_id && r.monteur_id !== mijnId);
     if (aGeclaimd !== bGeclaimd) return aGeclaimd ? 1 : -1;
     // Sorteer op uiterste_datum_afdeling oplopend, nulls onderaan
     const da = a[0].uiterste_datum_afdeling;
@@ -805,7 +805,7 @@ function renderLists() {
       ${geclaimdLijst.map(regels => {
         const h = regels[0];
         const monteurs = [...new Set(regels.filter(r => r.monteurs?.naam).map(r => r.monteurs.naam))].join(', ');
-        const werkRegels = regels.filter(r => (r.doorsluizenjn||'').toUpperCase() === 'J');
+        const werkRegels = regels.filter(r => isWerkRegel(r));
         const extraWerk  = regels.filter(r => isInstructieRegel(r));
         return `<div style="background:#fff;border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:var(--r);margin-bottom:8px;padding:10px 14px;opacity:.75">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -1026,9 +1026,10 @@ function groepCardHTML(regels, mijnId, modus, logs) {
     : '';
 
   // In behandeling: alle regels tonen met Details-knop, J/N scheiding alleen in open-modus
-  const jRegels       = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'J');
-  const nRegels       = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'N');
-  const ondNietJ      = regels.filter(r => !['J','N'].includes((r.doorsluizenjn || '').toUpperCase()));
+  // (99-BASIS service-regels tellen als J-regel, nooit als onderdeel — zie isWerkRegel())
+  const jRegels       = regels.filter(r => isWerkRegel(r));
+  const nRegels       = regels.filter(r => (r.doorsluizenjn || '').toUpperCase() === 'N' && !isServiceRegel(r));
+  const ondNietJ      = regels.filter(r => !isWerkRegel(r) && !['J','N'].includes((r.doorsluizenjn || '').toUpperCase()));
   const werkRegels      = modus === 'onderdelen' ? regels : [...jRegels, ...ondNietJ];
   const onderdeelRegels = modus === 'onderdelen' ? [] : nRegels;
 
@@ -1590,6 +1591,7 @@ async function vrijgeefRegel(id) {
     x.opdrachtnr === r.opdrachtnr &&
     x.id !== id &&
     (x.doorsluizenjn || '').toUpperCase() === 'N' &&
+    !isServiceRegel(x) &&
     x.monteur_id === state.monteur?.id &&
     !isRegelAfgerond(x)
   );
@@ -1646,6 +1648,7 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
   const nRegels = state.reparaties.filter(r =>
     r.opdrachtnr === opdrachtnr &&
     (r.doorsluizenjn || '').toUpperCase() === 'N' &&
+    !isServiceRegel(r) &&
     r.monteur_id
   );
   const alleIds = [...new Set([...ids, ...nRegels.map(r => r.id)])];
@@ -1698,6 +1701,17 @@ async function vrijgeefAlles(ids, opdrachtnr, event) {
 
 function isInstructieRegel(r) {
   return (r.artikelcode || '').toLowerCase() === '99-werkplaats';
+}
+
+// Artikelcode 99-BASIS is een generieke reparatieservice-regel: doorsluizenjn
+// staat op 'N' omdat er fysiek niets doorgesluisd hoeft te worden, maar het is
+// wél de eigenlijke werktaak — nooit als 'onderdeel' behandelen, altijd
+// claimbaar/afrondbaar zoals een normale (J-)werkregel.
+function isServiceRegel(r) {
+  return (r.artikelcode || '').toUpperCase() === '99-BASIS';
+}
+function isWerkRegel(r) {
+  return (r.doorsluizenjn || '').toUpperCase() === 'J' || isServiceRegel(r);
 }
 
 // Een regel is afgerond als status=519 OF als afgerond_op gevuld is.
@@ -1787,9 +1801,9 @@ async function bevestigClaimAlles() {
   const betrokkenOpdrachten = [...new Set(ids.map(id => state.reparaties.find(x => x.id === id)?.opdrachtnr).filter(Boolean))];
   const extraNIds = [];
   for (const opdr of betrokkenOpdrachten) {
-    const alleJ = state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r));
+    const alleJ = state.reparaties.filter(r => r.opdrachtnr === opdr && isWerkRegel(r) && !isInstructieRegel(r));
     if (alleJ.every(r => r.monteur_id || ids.includes(r.id))) {
-      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !r.monteur_id && magClaimen(r))
+      state.reparaties.filter(r => r.opdrachtnr === opdr && (r.doorsluizenjn||'').toUpperCase() === 'N' && !isServiceRegel(r) && !r.monteur_id && magClaimen(r))
         .forEach(r => extraNIds.push(r.id));
     }
   }
@@ -2100,7 +2114,7 @@ function vulRegelChips(containerId, textareaId, opdrachtnr) {
   const regels = state.reparaties.filter(r =>
     r.opdrachtnr === opdrachtnr &&
     !isInstructieRegel(r) &&
-    (r.doorsluizenjn || '').toUpperCase() === 'J'
+    isWerkRegel(r)
   );
   if (!regels.length) { container.innerHTML = ''; return; }
   container.innerHTML = regels.map(r => {
@@ -2356,9 +2370,9 @@ async function startReparatie() {
     r.monteurs   = { naam: state.monteur.naam, initialen: state.monteur.initialen };
     r.in_behandeling_op = now;
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
-    const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
+    const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && isWerkRegel(r2) && !isInstructieRegel(r2));
     if (alleJ.every(r2 => r2.monteur_id)) {
-      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2))
+      state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !isServiceRegel(r2) && !r2.monteur_id && magClaimen(r2))
         .forEach(n => { n.status = statusInBehandeling(n); n.monteur_id = mijnId; n.monteurs = { naam: state.monteur.naam, initialen: state.monteur.initialen }; n.in_behandeling_op = now; });
     }
     renderLists();
@@ -2378,10 +2392,10 @@ async function startReparatie() {
     });
     await insertLog({ reparatie_id: r.id, monteur_id: mijnId, monteur_naam: state.monteur.naam, actie: 'start', opdrachtnr, regelnummer: r.regelnummer, opdrachtcode: r.opdrachtcode || null, artikelcode: r.artikelcode, aantal: r.aantal, artikelomschrijving: r.artikelomschrijving, serienummer: r.serienummer, tagnummer: r.tagnummer, opdrachtstatus: r.status || null, nieuwe_opdrachtstatus: nieuweStatus });
     // Auto-claim N-regels als alle J-regels van de opdracht nu geclaimd zijn
-    const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r2));
+    const alleJ = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && isWerkRegel(r2) && !isInstructieRegel(r2));
     const alleJGeclaimd = alleJ.every(r2 => r2.monteur_id || r2.id === r.id);
     if (alleJGeclaimd) {
-      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !r2.monteur_id && magClaimen(r2));
+      const nRegels = state.reparaties.filter(r2 => r2.opdrachtnr === opdrachtnr && (r2.doorsluizenjn||'').toUpperCase() === 'N' && !isServiceRegel(r2) && !r2.monteur_id && magClaimen(r2));
       for (const n of nRegels) {
         await updateReparatieStatus(n.id, { status: statusInBehandeling(n), monteur_id: mijnId, toegewezen_door: 'monteur', in_behandeling_op: now });
       }
@@ -2484,7 +2498,7 @@ function statusAfgerond(r, meeAfgerondeIds = [r.id]) {
 function isRepUitkomstRegel(r) {
   const code = (r.opdrachtcode || '').toUpperCase();
   return code.startsWith('REP') && !code.startsWith('REPKR') && !code.startsWith('REPPR')
-    && (r.doorsluizenjn || '').toUpperCase() === 'J';
+    && isWerkRegel(r);
 }
 
 function afrondOfUitkomst() {
@@ -2528,12 +2542,12 @@ function kiesUitkomst(uitkomst) {
 // zodat de zojuist afgeronde regel(s) al meetellen in de check.
 async function voltooiNRegelsIndienCompleet(opdrachtnr, now) {
   const alleJRegels = state.reparaties.filter(r =>
-    r.opdrachtnr === opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(r)
+    r.opdrachtnr === opdrachtnr && isWerkRegel(r) && !isInstructieRegel(r)
   );
   if (!alleJRegels.length || !alleJRegels.every(isRegelAfgerond)) return;
 
   const nRegels = state.reparaties.filter(r =>
-    r.opdrachtnr === opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'N' && !isRegelAfgerond(r)
+    r.opdrachtnr === opdrachtnr && (r.doorsluizenjn || '').toUpperCase() === 'N' && !isServiceRegel(r) && !isRegelAfgerond(r)
   );
   if (!nRegels.length) return;
 
@@ -6566,8 +6580,13 @@ function witgoedGroepCardHTML(regels, mijnId) {
   const hoofd      = regels[0];
   const nr         = hoofd.opdrachtnr;
   const groepId    = `groep-wg-${nr}`.replace(/[^a-z0-9-]/gi, '_');
+  // Let op: dit is de tag-scan claimflow voor fysieke witgoed-apparaten uit
+  // voorraad (witgoed_apparaten) — 99-BASIS-servicergels horen hier NIET in
+  // thuis (geen apparaat om te picken), die zijn al gewoon claimbaar via de
+  // normale Werkplaats-kaart (groepCardHTML). Wel uitsluiten van de
+  // 'Onderdelen'-sectie hieronder, want ze zijn geen onderdeel.
   const werkRegels      = regels.filter(r => (r.doorsluizenjn||'').toUpperCase() === 'J' && !isInstructieRegel(r));
-  const onderdeelRegels = regels.filter(r => (r.doorsluizenjn||'').toUpperCase() === 'N' && !isInstructieRegel(r));
+  const onderdeelRegels = regels.filter(r => (r.doorsluizenjn||'').toUpperCase() === 'N' && !isServiceRegel(r) && !isInstructieRegel(r));
   const alle            = state.witgoedApparaten || [];
 
   // Totaal / geclaimd count voor badge — unieke tagnrs, actief+afgerond, geen geannuleerd
@@ -7242,7 +7261,7 @@ function renderOnderdelen() {
 
   const groepen = {};
   state.reparaties
-    .filter(r => r.status === '455' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && (x.doorsluizenjn || '').toUpperCase() === 'J' && !isInstructieRegel(x)))
+    .filter(r => r.status === '455' && !isInstructieRegel(r) && state.reparaties.some(x => x.opdrachtnr === r.opdrachtnr && isWerkRegel(x) && !isInstructieRegel(x)))
     .forEach(r => {
       if (!groepen[r.opdrachtnr]) groepen[r.opdrachtnr] = [];
       groepen[r.opdrachtnr].push(r);
