@@ -202,20 +202,23 @@ async function syncReparaties(pool) {
         // Update: alleen ERP-velden, nooit beschermde werkplaats-velden —
         // BEHALVE 'status' zolang een regel nog volledig onaangeroerd is
         // (nog niet geclaimd/in behandeling/afgerond) ÉN de nieuwe ERP-status
-        // hoogstens 500 is. Statussen boven 500 (501/503/505/519 e.d.) zijn
-        // onze eigen workflow-codes voor 'in behandeling'/'afgerond' en mogen
+        // ONDER 500 ligt. 500 t/m 505 (en hoger, bv. 519) zijn onze eigen
+        // workflow-codes voor 'open'/'in behandeling'/'afgerond' en mogen
         // alleen door de app zelf gezet worden (claimen/afronden) — nooit
-        // door de sync, ook niet voor een onaangeroerde regel. Zonder deze
-        // cap liet dit 'status' bij elke sync-ronde meebewegen met álle ERP-
-        // opdrachtstatussen zolang niemand had geclaimd, waardoor een
-        // tussentijdse ERP-statuswissel een nog openstaande order stilletjes
-        // onclaimbaar kon maken zonder dat er aan de opdracht zelf iets was
-        // gewijzigd (2026-09-21, gemeld: "waarom gaat status van 500 naar
-        // 470"). De losse 'opdrachtstatus'-kolom blijft altijd gewoon live
-        // meebewegen met het ERP, ongeacht deze cap.
+        // door de sync, ook niet voor een onaangeroerde regel. Reden: de
+        // net opgehaalde ERP-data kan nog niet volledig verwerkt zijn aan
+        // ERP-kant, dus een sync-ronde zou zo'n regel per ongeluk kunnen
+        // terugzetten naar 500-505 terwijl de werkelijke voortgang al verder
+        // is. Zonder cap liet dit 'status' bij elke sync-ronde meebewegen met
+        // álle ERP-opdrachtstatussen zolang niemand had geclaimd, waardoor
+        // een tussentijdse ERP-statuswissel een nog openstaande order
+        // stilletjes onclaimbaar kon maken zonder dat er aan de opdracht
+        // zelf iets was gewijzigd (2026-09-21, gemeld: "waarom gaat status
+        // van 500 naar 470"). De losse 'opdrachtstatus'-kolom blijft altijd
+        // gewoon live meebewegen met het ERP, ongeacht deze cap.
         const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
         const statusNum       = rij.status != null ? parseInt(rij.status, 10) : NaN;
-        const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum <= 500;
+        const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum < 500;
         const teBeschermen = magStatusMee
           ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
           : BESCHERMDE_VELDEN;
@@ -373,10 +376,11 @@ async function syncVanApi() {
         if (bestaand.length > 0) {
           // Zie de uitleg bij dezelfde constructie in syncReparaties() hierboven:
           // 'status' mag alleen meebewegen voor een onaangeroerde regel, en
-          // alleen als de nieuwe ERP-status hoogstens 500 is.
+          // alleen als de nieuwe ERP-status ONDER 500 ligt (500 t/m 505 en
+          // hoger zijn onze eigen workflow-codes, nooit via de sync).
           const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
           const statusNum       = rij.status != null ? parseInt(rij.status, 10) : NaN;
-          const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum <= 500;
+          const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum < 500;
           const teBeschermen = magStatusMee
             ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
             : BESCHERMDE_VELDEN;
