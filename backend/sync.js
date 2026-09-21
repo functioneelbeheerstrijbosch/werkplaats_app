@@ -194,26 +194,33 @@ async function syncReparaties(pool) {
       gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
       const [bestaand] = await db.query(
-        'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+        'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
         [rij.opdrachtnr, rij.regelnummer ?? 1]
       );
 
       if (bestaand.length > 0) {
-        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden.
-        // 'status' wordt uitsluitend gezet bij het aanmaken van een nieuwe
-        // regel (fallback op opdrachtstatus, zie bouwApiRij/bouwMysqlRij) en
-        // daarna nooit meer door de sync overschreven — ook niet zolang een
-        // regel nog onaangeroerd is. Eerder liet dit 'status' bij elke
-        // sync-ronde meebewegen met de ruwe ERP-opdrachtstatus zolang niemand
-        // had geclaimd, waardoor een tussentijdse ERP-statuswissel (bv. naar
-        // 470, dat niet in CLAIMBARE_OPEN_STATUSSEN zit) een nog openstaande
-        // order stilletjes onclaimbaar maakte zonder dat er iets aan de
-        // opdracht zelf was gewijzigd (2026-09-21, gemeld: "waarom gaat
-        // status van 500 naar 470"). De losse 'opdrachtstatus'-kolom blijft
-        // wél gewoon meebewegen met het ERP — alleen de eigen workflow-status
-        // ligt nu vast na aanmaken.
+        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden —
+        // BEHALVE 'status' zolang een regel nog volledig onaangeroerd is
+        // (nog niet geclaimd/in behandeling/afgerond) ÉN de nieuwe ERP-status
+        // hoogstens 500 is. Statussen boven 500 (501/503/505/519 e.d.) zijn
+        // onze eigen workflow-codes voor 'in behandeling'/'afgerond' en mogen
+        // alleen door de app zelf gezet worden (claimen/afronden) — nooit
+        // door de sync, ook niet voor een onaangeroerde regel. Zonder deze
+        // cap liet dit 'status' bij elke sync-ronde meebewegen met álle ERP-
+        // opdrachtstatussen zolang niemand had geclaimd, waardoor een
+        // tussentijdse ERP-statuswissel een nog openstaande order stilletjes
+        // onclaimbaar kon maken zonder dat er aan de opdracht zelf iets was
+        // gewijzigd (2026-09-21, gemeld: "waarom gaat status van 500 naar
+        // 470"). De losse 'opdrachtstatus'-kolom blijft altijd gewoon live
+        // meebewegen met het ERP, ongeacht deze cap.
+        const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+        const statusNum       = rij.status != null ? parseInt(rij.status, 10) : NaN;
+        const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum <= 500;
+        const teBeschermen = magStatusMee
+          ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+          : BESCHERMDE_VELDEN;
         const updateRij = Object.fromEntries(
-          Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+          Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
         );
         const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
         if (setCols) {
@@ -359,15 +366,22 @@ async function syncVanApi() {
         gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
         const [bestaand] = await db.query(
-          'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+          'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
           [rij.opdrachtnr, rij.regelnummer ?? 1]
         );
 
         if (bestaand.length > 0) {
           // Zie de uitleg bij dezelfde constructie in syncReparaties() hierboven:
-          // 'status' wordt na aanmaken nooit meer door de sync overschreven.
+          // 'status' mag alleen meebewegen voor een onaangeroerde regel, en
+          // alleen als de nieuwe ERP-status hoogstens 500 is.
+          const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
+          const statusNum       = rij.status != null ? parseInt(rij.status, 10) : NaN;
+          const magStatusMee    = nogOnaangeroerd && !Number.isNaN(statusNum) && statusNum <= 500;
+          const teBeschermen = magStatusMee
+            ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
+            : BESCHERMDE_VELDEN;
           const updateRij = Object.fromEntries(
-            Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+            Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
           );
           const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
           if (setCols) {
