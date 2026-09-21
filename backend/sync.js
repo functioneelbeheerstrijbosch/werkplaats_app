@@ -194,24 +194,26 @@ async function syncReparaties(pool) {
       gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
       const [bestaand] = await db.query(
-        'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+        'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
         [rij.opdrachtnr, rij.regelnummer ?? 1]
       );
 
       if (bestaand.length > 0) {
-        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden —
-        // BEHALVE 'status' zolang een regel nog volledig onaangeroerd is
-        // (nog niet geclaimd/in behandeling/afgerond). Tot dat moment is
-        // 'status' nog geen door de app beheerd veld maar simpelweg de
-        // meest recente ERP-status, en moet 'ie — net als bij het aanmaken
-        // — blijven meebewegen met opdrachtstatus. Zodra een monteur de
-        // regel claimt, bevriest 'status' zoals gebruikelijk.
-        const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
-        const teBeschermen = nogOnaangeroerd
-          ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
-          : BESCHERMDE_VELDEN;
+        // Update: alleen ERP-velden, nooit beschermde werkplaats-velden.
+        // 'status' wordt uitsluitend gezet bij het aanmaken van een nieuwe
+        // regel (fallback op opdrachtstatus, zie bouwApiRij/bouwMysqlRij) en
+        // daarna nooit meer door de sync overschreven — ook niet zolang een
+        // regel nog onaangeroerd is. Eerder liet dit 'status' bij elke
+        // sync-ronde meebewegen met de ruwe ERP-opdrachtstatus zolang niemand
+        // had geclaimd, waardoor een tussentijdse ERP-statuswissel (bv. naar
+        // 470, dat niet in CLAIMBARE_OPEN_STATUSSEN zit) een nog openstaande
+        // order stilletjes onclaimbaar maakte zonder dat er iets aan de
+        // opdracht zelf was gewijzigd (2026-09-21, gemeld: "waarom gaat
+        // status van 500 naar 470"). De losse 'opdrachtstatus'-kolom blijft
+        // wél gewoon meebewegen met het ERP — alleen de eigen workflow-status
+        // ligt nu vast na aanmaken.
         const updateRij = Object.fromEntries(
-          Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+          Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
         );
         const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
         if (setCols) {
@@ -357,20 +359,15 @@ async function syncVanApi() {
         gezienPerRegel.add(`${rij.opdrachtnr}|${rij.regelnummer ?? 1}`);
 
         const [bestaand] = await db.query(
-          'SELECT id, monteur_id, in_behandeling_op, afgerond_op FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
+          'SELECT id FROM reparaties WHERE opdrachtnr = ? AND regelnummer = ?',
           [rij.opdrachtnr, rij.regelnummer ?? 1]
         );
 
         if (bestaand.length > 0) {
-          // Zie de uitleg bij dezelfde constructie in syncReparaties()
-          // hierboven: 'status' blijft meebewegen met opdrachtstatus zolang
-          // een regel nog niet door een monteur is aangeraakt.
-          const nogOnaangeroerd = !bestaand[0].monteur_id && !bestaand[0].in_behandeling_op && !bestaand[0].afgerond_op;
-          const teBeschermen = nogOnaangeroerd
-            ? new Set([...BESCHERMDE_VELDEN].filter(v => v !== 'status'))
-            : BESCHERMDE_VELDEN;
+          // Zie de uitleg bij dezelfde constructie in syncReparaties() hierboven:
+          // 'status' wordt na aanmaken nooit meer door de sync overschreven.
           const updateRij = Object.fromEntries(
-            Object.entries(rij).filter(([k]) => !teBeschermen.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
+            Object.entries(rij).filter(([k]) => !BESCHERMDE_VELDEN.has(k) && k !== 'opdrachtnr' && k !== 'regelnummer')
           );
           const setCols = Object.keys(updateRij).map(c => `\`${c}\` = ?`).join(', ');
           if (setCols) {
