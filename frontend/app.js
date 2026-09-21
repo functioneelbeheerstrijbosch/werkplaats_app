@@ -1185,9 +1185,12 @@ function groepCardHTML(regels, mijnId, modus, logs) {
 
   const regelsHTML = werkRegelsHTML + onderdeelSectieHTML;
 
-  // "Alles claimen" — alleen vrije, claimbare J-regels
+  // "Alles claimen" — alleen vrije, claimbare J-regels. Reparatie-opdrachten
+  // (REP-code) zijn op verzoek alleen nog per regel claimbaar, geen
+  // "hele opdracht"-knop meer — andere opdrachtsoorten (levering e.d.)
+  // blijven wel in één keer claimbaar.
   const vrijeClaim = werkRegels.filter(r => !r.monteur_id && magClaimen(r));
-  const allesClaimen = modus === 'open' && vrijeClaim.length >= 1 && geclaimd === 0
+  const allesClaimen = modus === 'open' && !isRepCode(hoofd) && vrijeClaim.length >= 1 && geclaimd === 0
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border)">
         <button class="claim-btn" style="width:100%" onclick="claimAlles(${JSON.stringify(vrijeClaim.map(r => r.id)).replace(/"/g,'&quot;')},event)">
           Hele opdracht claimen (${vrijeClaim.length} regel${vrijeClaim.length !== 1 ? 's' : ''})
@@ -2475,6 +2478,13 @@ function afrondOfUitkomst() {
   const taken   = leesWerkplaatsTaken(document.getElementById('ma-werkplaats-taken'));
   if (!notitie && !taken.length) { toast('⚠ Vul minimaal in wat je hebt gedaan'); return; }
 
+  // Bestede tijd is bij reparatie-opdrachten (REP-code) een verplicht veld.
+  if (isRepCode(r)) {
+    const uren    = parseInt(document.getElementById('ma-uren').value) || 0;
+    const minuten = parseInt(document.getElementById('ma-minuten').value) || 0;
+    if (uren === 0 && minuten === 0) { toast('⚠ Vul de bestede tijd in'); return; }
+  }
+
   if (isRepUitkomstRegel(r)) {
     document.getElementById('mu-sub').textContent =
       `${r.artikelcode} · ${r.artikelomschrijving || ''} · Opdracht ${r.opdrachtnr}`;
@@ -2848,6 +2858,17 @@ async function bevestigBulkAfrond() {
     notitiePerRegel[id] = _mabPerRegel
       ? ([taken.join(', '), document.getElementById('mab-notitie-' + id)?.value.trim() || ''].filter(Boolean).join('\n'))
       : gedeeldNotitie;
+  }
+
+  // Bestede tijd is bij reparatie-opdrachten (REP-code) een verplicht veld —
+  // ook bij bulk-afronden, per regel gecontroleerd.
+  const repZonderTijd = bulkAfrondIds.filter(id => {
+    const r = state.reparaties.find(x => x.id === id);
+    return r && isRepCode(r) && !tijdPerRegel[id];
+  });
+  if (repZonderTijd.length) {
+    toast('⚠ Vul de bestede tijd in voor alle reparatieregels');
+    return;
   }
 
   closeModal('modal-afrond-bulk');
