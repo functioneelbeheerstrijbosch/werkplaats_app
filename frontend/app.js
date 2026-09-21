@@ -1185,12 +1185,12 @@ function groepCardHTML(regels, mijnId, modus, logs) {
 
   const regelsHTML = werkRegelsHTML + onderdeelSectieHTML;
 
-  // "Alles claimen" — alleen vrije, claimbare J-regels. Reparatie-opdrachten
-  // (REP-code) zijn op verzoek alleen nog per regel claimbaar, geen
-  // "hele opdracht"-knop meer — andere opdrachtsoorten (levering e.d.)
-  // blijven wel in één keer claimbaar.
+  // "Alles claimen" — alleen vrije, claimbare J-regels. Geldt voor alle
+  // opdrachtsoorten, ook reparatie (REP-code) — alleen het in één keer
+  // AFRONDEN van meerdere reparatieregels is beperkt, zie kanBulkAfronden
+  // hieronder en afrondSelectie().
   const vrijeClaim = werkRegels.filter(r => !r.monteur_id && magClaimen(r));
-  const allesClaimen = modus === 'open' && !isRepCode(hoofd) && vrijeClaim.length >= 1 && geclaimd === 0
+  const allesClaimen = modus === 'open' && vrijeClaim.length >= 1 && geclaimd === 0
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border)">
         <button class="claim-btn" style="width:100%" onclick="claimAlles(${JSON.stringify(vrijeClaim.map(r => r.id)).replace(/"/g,'&quot;')},event)">
           Hele opdracht claimen (${vrijeClaim.length} regel${vrijeClaim.length !== 1 ? 's' : ''})
@@ -1198,11 +1198,14 @@ function groepCardHTML(regels, mijnId, modus, logs) {
        </div>`
     : '';
 
-  // "Alles afronden" + "Alles vrijgeven" — eigen regels in behandeling
+  // "Alles afronden" + "Alles vrijgeven" — eigen regels in behandeling.
+  // Reparatie-opdrachten (REP-code) mogen wel in één keer geclaimd worden,
+  // maar niet in één keer afgerond — dat moet per regel, dus de knop blijft
+  // uit voor REP ongeacht de rest van de voorwaarden.
   const mijneRegels = werkRegels.filter(r => r.monteur_id === mijnId);
   // Controleer alleen de regels die de monteur zelf wil afronden
   const blokkeerRegels = mijneRegels.filter(r => r.status !== statusInBehandeling(r));
-  const kanBulkAfronden = modus === 'behandeling' && mijneRegels.length > 1 && blokkeerRegels.length === 0;
+  const kanBulkAfronden = modus === 'behandeling' && !isRepCode(hoofd) && mijneRegels.length > 1 && blokkeerRegels.length === 0;
   const allesAfronden = modus === 'behandeling' && mijneRegels.length > 1
     ? `<div style="padding:8px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
         ${blokkeerRegels.length
@@ -1513,11 +1516,24 @@ async function vrijgeefSelectie() {
 
 function afrondSelectie() {
   const ids = [...geselecteerdeRegels.keys()];
-  clearSelectie();
   if (ids.length === 1) {
+    clearSelectie();
     openAfrond(ids[0]);
     return;
   }
+  // Reparatieregels (REP-code) mogen niet in één keer afgerond worden —
+  // die moeten stuk voor stuk. Zelfde beperking als de "Hele opdracht
+  // afronden"-knop, maar hier omdat de selectie ook regels uit
+  // verschillende opdrachten kan bevatten.
+  const repIds = ids.filter(id => {
+    const r = state.reparaties.find(x => x.id === id);
+    return r && isRepCode(r);
+  });
+  if (repIds.length) {
+    toast('⚠ Reparatieregels kunnen niet gezamenlijk afgerond worden — rond ze één voor één af');
+    return;
+  }
+  clearSelectie();
   const fakeEvent = { stopPropagation: () => {} };
   const opdrachtnr = state.reparaties.find(r => r.id === ids[0])?.opdrachtnr || '';
   openBulkAfrond(ids, opdrachtnr, fakeEvent);
